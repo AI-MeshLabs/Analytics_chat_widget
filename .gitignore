@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# Cursor / agent skill bundles (not part of the app)
+.agents/
+skills-lock.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Analytics Chat Widget
 
-## Getting Started
+Standalone Next.js app for an embeddable analytics chat widget (OnePoint Analytics Assistant).
 
-First, run the development server:
+## Setup Commands
 
 ```bash
+npm install
+cp .env.example .env
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App routes:
+- Main app: `http://localhost:3000`
+- Demo embed host page: `http://localhost:3000/demo-embed`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Required/expected values:
 
-## Learn More
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_KEY` - Supabase service role key used server-side for read queries
+- `NODE_ENV` - `development` or `production`
 
-To learn more about Next.js, take a look at the following resources:
+Current `.env.example` also includes:
+- `PROJECTDB_URL`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Embed Instructions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Use this snippet inside another app:
 
-## Deploy on Vercel
+```html
+<script>
+  window.AnalyticsWidgetConfig = {
+    apiBase: "https://domain.com",
+    token: ""
+  };
+</script>
+<script src="https://domain.com/analytics-widget.js"></script>
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Notes:
+- `analytics-widget.js` is served from `public/analytics-widget.js`
+- Widget API calls go to `${apiBase}/api/analytics-chat/query`
+- The script uses Shadow DOM to avoid affecting host app CSS
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment Instructions
+
+### Docker (single container)
+
+Build and run:
+
+```bash
+docker build -t analytics-chat-widget .
+docker run --rm -p 4003:4003 \
+  -e NODE_ENV=production \
+  -e SUPABASE_URL="https://your-project-id.supabase.co" \
+  -e SUPABASE_KEY="your-service-role-key" \
+  analytics-chat-widget
+```
+
+The app is exposed on port `4003`.
+
+### Docker Compose
+
+1. Set environment values in `.env`
+2. Run:
+
+```bash
+docker compose up --build -d
+```
+
+Service config is in `docker-compose.yml` and maps `4003:4003`.
