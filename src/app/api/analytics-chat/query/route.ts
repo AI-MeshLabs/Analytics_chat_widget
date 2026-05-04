@@ -36,7 +36,7 @@ type QueryResponse = {
 };
 
 const UNKNOWN_INTENT_MESSAGE =
-  "I can only help with call analytics such as call volume, duration, unsuccessful calls, and trends.";
+  "I can only help with questions like calls made today, average call duration, and unsuccessful calls.";
 const CACHE_TTL_MS = 60 * 1000;
 const analyticsCache = new Map<string, { expiresAt: number; value: QueryResponse }>();
 
@@ -351,6 +351,20 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
+/** Human-readable duration for narrative answers (e.g. chip quick-actions for “today”). */
+function formatDurationWords(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(Number(totalSeconds)));
+  const minutes = Math.floor(s / 60);
+  const seconds = s % 60;
+  if (minutes === 0) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  if (seconds === 0) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  return `${minutes} minute${minutes === 1 ? "" : "s"} ${seconds} second${seconds === 1 ? "" : "s"}`;
+}
+
+function isNarrativeTodayAnswer(dateFilter: DateFilterKey, customDateLabel: string | null): boolean {
+  return dateFilter === "today" && customDateLabel === null;
+}
+
 function buildAnswer(
   intent: AnalyticsIntent,
   rows: Array<Record<string, unknown>>,
@@ -362,11 +376,27 @@ function buildAnswer(
 
   switch (intent) {
     case "calls_today":
+      if (isNarrativeTodayAnswer(dateFilter, customDateLabel)) {
+        const n = toNumber(first.total_calls);
+        const bold = n === 1 ? "1 call today" : `${n} calls today`;
+        return `There were **${bold}** across all tracked lines.`;
+      }
+      return `Total calls for ${label}: ${toNumber(first.total_calls)}.`;
     case "calls_this_week":
       return `Total calls for ${label}: ${toNumber(first.total_calls)}.`;
     case "average_duration":
+      if (isNarrativeTodayAnswer(dateFilter, customDateLabel)) {
+        const sec = toNumber(first.average_duration_seconds);
+        const bold = formatDurationWords(sec);
+        return `The average call duration for today is **${bold}**.`;
+      }
       return `Average call duration for ${label}: ${toNumber(first.average_duration_seconds)} seconds.`;
     case "unsuccessful_calls":
+      if (isNarrativeTodayAnswer(dateFilter, customDateLabel)) {
+        const n = toNumber(first.unsuccessful_calls);
+        const bold = n === 1 ? "1 unsuccessful call today" : `${n} unsuccessful calls today`;
+        return `There were **${bold}**, including missed and incomplete interactions.`;
+      }
       return `Unsuccessful calls for ${label}: ${toNumber(first.unsuccessful_calls)}.`;
     case "calls_by_day":
       return rows.length ? "Here is the calls-by-day breakdown." : "No calls found for this period.";

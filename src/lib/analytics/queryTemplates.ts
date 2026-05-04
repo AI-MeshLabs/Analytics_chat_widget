@@ -28,8 +28,10 @@ function ensureSafeSelectOnly(sql: string) {
     throw new Error("Unsafe SQL operation detected in template.");
   }
 
-  if (!normalized.includes(" from onepoint.call_data")) {
-    throw new Error("Templates must query only the onepoint.call_data table.");
+  const allowedTable =
+    /\bfrom\s+onepoint\.call_data\b/.test(normalized) || /\bfrom\s+onepoint\.calls\b/.test(normalized);
+  if (!allowedTable) {
+    throw new Error("Templates must query only onepoint.call_data or onepoint.calls.");
   }
 }
 
@@ -73,9 +75,9 @@ export function getSafeAnalyticsQueryTemplate(
     case "unsuccessful_calls":
       sql = `
         SELECT COUNT(*)::int AS unsuccessful_calls
-        FROM onepoint.call_data
+        FROM onepoint.calls
         WHERE ${filterClause}
-          AND LOWER(status) IN ('failed', 'missed', 'incomplete', 'dropped')
+          AND LOWER(status::text) IN ('failed', 'missed', 'incomplete', 'dropped')
       `;
       break;
 

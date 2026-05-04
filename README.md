@@ -71,3 +71,15 @@ docker compose up --build -d
 ```
 
 Service config is in `docker-compose.yml` and maps `4003:4003`.
+
+### VPS: use production, not `next dev`
+
+On a server, run a **production** build and `next start` (or Docker). **Do not** use `npm run dev` in production: it enables **webpack HMR** over WebSockets (`/_next/webpack-hmr`), which often **fails** when you use Nginx, a non-proxying port forward, or HTTP without WebSocket upgrade — you will see red console errors and unstable behavior. Example:
+
+```bash
+npm ci
+npm run build
+NODE_ENV=production npm run start -- -p 3002
+```
+
+Put `.env` with `SUPABASE_URL` and `SUPABASE_KEY` next to the app (or export them in the shell). Use [`upgrade` headers](https://nginx.org/en/docs/http/websocket.html) in Nginx only if you intentionally run **development** mode behind a proxy.

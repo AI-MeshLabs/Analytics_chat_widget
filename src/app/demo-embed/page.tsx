@@ -38,11 +38,11 @@ export default function DemoEmbedPage() {
           <pre className="mt-4 overflow-auto rounded-xl bg-slate-900 p-4 text-xs text-slate-100">
             {`<script>
   window.AnalyticsWidgetConfig = {
-    apiBase: "https://domain.com",
+    apiBase: "http://46.250.246.195:4003",
     token: ""
   };
 </script>
-<script src="https://domain.com/analytics-widget.js"></script>`}
+<script src="http://46.250.246.195:4003/analytics-widget.js"></script>`}
           </pre>
         </section>
       </main>

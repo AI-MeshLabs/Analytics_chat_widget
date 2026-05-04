@@ -205,15 +205,10 @@ export async function runCallDetailsReadQuery(
       }
 
       case "unsuccessful_calls": {
-        const [sentimentCount, statusCount] = await Promise.all([
-          countWithDateFilter(CALL_DATA_TABLE, dateFilter, customDateRange, {
-            in: { column: "sentiment", values: ["negative", "very_negative", "angry", "frustrated"] },
-          }),
-          countWithDateFilter(CALLS_TABLE, dateFilter, customDateRange, {
-            in: { column: "status", values: ["failed", "missed", "incomplete", "dropped"] },
-          }).catch(() => 0),
-        ]);
-        return [{ unsuccessful_calls: sentimentCount + statusCount }];
+        const count = await countWithDateFilter(CALLS_TABLE, dateFilter, customDateRange, {
+          in: { column: "status", values: ["failed", "missed", "incomplete", "dropped"] },
+        }).catch(() => 0);
+        return [{ unsuccessful_calls: count }];
       }
 
       case "calls_by_day": {

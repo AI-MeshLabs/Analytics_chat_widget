@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useState } from "react";
 
 /** Integers, decimals, and thousands like 1,234 — shown bold in assistant replies. */
 const NUMERIC_TOKEN =
@@ -22,6 +22,23 @@ function assistantContentWithBoldNumbers(text: string): ReactNode {
         {part}
       </span>
     );
+  });
+}
+
+/** Renders `**phrase**` from the API as bold; other text still gets numeric emphasis. */
+function assistantContentWithFormatting(text: string): ReactNode {
+  const segments = text.split(/(\*\*[\s\S]*?\*\*)/g);
+  return segments.map((seg, i) => {
+    if (!seg) return null;
+    const boldMatch = seg.match(/^\*\*([\s\S]*?)\*\*$/);
+    if (boldMatch) {
+      return (
+        <strong key={i} className="font-bold">
+          {boldMatch[1]}
+        </strong>
+      );
+    }
+    return <span key={i}>{assistantContentWithBoldNumbers(seg)}</span>;
   });
 }
 
@@ -48,7 +65,6 @@ const starterMessages: ChatMessage[] = [
 ];
 
 const CHAT_FETCH_MS = 45_000;
-const KPI_FETCH_MS = 40_000;
 
 function timeoutSignal(ms: number): AbortSignal {
   if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -59,118 +75,16 @@ function timeoutSignal(ms: number): AbortSignal {
   return c.signal;
 }
 
-/** Browser-local calendar day (KPI cards should refresh when this changes). */
-function localCalendarDayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export function AnalyticsChatWidget() {
-  const lastKpiCalendarDayRef = useRef<string>(localCalendarDayKey(new Date()));
-  const [isOpen, setIsOpen] = useState(true);
+  /** Panel starts minimized (FAB only); user opens by tapping the launcher. */
+  const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(starterMessages);
   const [isLoading, setIsLoading] = useState(false);
-  const [kpis, setKpis] = useState({
-    callsToday: "0",
-    avgDuration: "0s",
-    unsuccessful: "0",
-  });
 
-  const fetchKpis = async () => {
-    try {
-      const kpiSignal = timeoutSignal(KPI_FETCH_MS);
-      const [callsRes, avgRes, unsuccessfulRes] = await Promise.all([
-        fetch("/api/analytics-chat/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: "Tell me the number of calls made today" }),
-          signal: kpiSignal,
-        }),
-        fetch("/api/analytics-chat/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: "Tell me the average call duration for today" }),
-          signal: kpiSignal,
-        }),
-        fetch("/api/analytics-chat/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: "Tell me the unsuccessful calls for today" }),
-          signal: kpiSignal,
-        }),
-      ]);
-
-      if (!callsRes.ok || !avgRes.ok || !unsuccessfulRes.ok) return;
-
-      const callsPayload = (await callsRes.json()) as AnalyticsQueryApiResponse;
-      const avgPayload = (await avgRes.json()) as AnalyticsQueryApiResponse;
-      const unsuccessfulPayload = (await unsuccessfulRes.json()) as AnalyticsQueryApiResponse;
-
-      const callsToday = Number(callsPayload.data?.[0]?.total_calls ?? 0);
-      const avgSeconds = Number(avgPayload.data?.[0]?.average_duration_seconds ?? 0);
-      const unsuccessful = Number(unsuccessfulPayload.data?.[0]?.unsuccessful_calls ?? 0);
-      const minutes = Math.floor(avgSeconds / 60);
-      const seconds = avgSeconds % 60;
-
-      setKpis({
-        callsToday: String(callsToday),
-        avgDuration: minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`,
-        unsuccessful: String(unsuccessful),
-      });
-    } catch {
-      // Keep defaults when KPI fetch fails.
-    }
-  };
-
-  useEffect(() => {
-    const initialFetchTimeout = window.setTimeout(() => {
-      void fetchKpis();
-    }, 0);
-
-    const intervalId = window.setInterval(fetchKpis, 10000);
-
-    let midnightTimer: number | undefined;
-    const scheduleMidnightKpiRefresh = () => {
-      if (midnightTimer !== undefined) window.clearTimeout(midnightTimer);
-      const now = new Date();
-      const nextMidnight = new Date(now);
-      nextMidnight.setHours(24, 0, 0, 0);
-      const delay = Math.max(0, nextMidnight.getTime() - now.getTime());
-      midnightTimer = window.setTimeout(() => {
-        lastKpiCalendarDayRef.current = localCalendarDayKey(new Date());
-        void fetchKpis();
-        scheduleMidnightKpiRefresh();
-      }, delay);
-    };
-    scheduleMidnightKpiRefresh();
-
-    const dayWatchId = window.setInterval(() => {
-      const today = localCalendarDayKey(new Date());
-      if (today !== lastKpiCalendarDayRef.current) {
-        lastKpiCalendarDayRef.current = today;
-        void fetchKpis();
-      }
-    }, 15000);
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        fetchKpis();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.clearTimeout(initialFetchTimeout);
-      window.clearInterval(intervalId);
-      window.clearInterval(dayWatchId);
-      if (midnightTimer !== undefined) window.clearTimeout(midnightTimer);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, []);
-
-  const sendMessage = async (event: FormEvent) => {
-    event.preventDefault();
-    const trimmed = input.trim();
+  const sendQuestion = async (question: string) => {
+    const trimmed = question.trim();
     if (!trimmed || isLoading) return;
 
     const userMessage: ChatMessage = {
@@ -204,7 +118,6 @@ export function AnalyticsChatWidget() {
         content: payload.answer ?? "No response available.",
       };
       setMessages((prev) => [...prev, assistantMessage]);
-      fetchKpis();
     } catch (err: unknown) {
       const timedOut =
         (err instanceof Error || err instanceof DOMException) && (err as Error).name === "AbortError";
@@ -221,6 +134,11 @@ export function AnalyticsChatWidget() {
     }
   };
 
+  const sendMessage = (event: FormEvent) => {
+    event.preventDefault();
+    void sendQuestion(input);
+  };
+
   const clearChat = () => {
     setMessages(starterMessages);
     setInput("");
@@ -231,7 +149,11 @@ export function AnalyticsChatWidget() {
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
       {isOpen ? (
         <section
-          className="h-[560px] w-[380px] max-w-[calc(100vw-2rem)] flex flex-col overflow-hidden rounded-[22px] border border-slate-200/90 bg-white/95 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-sm"
+          className={`max-w-[calc(100vw-2rem)] flex flex-col overflow-hidden rounded-[22px] border border-slate-200/90 bg-white/95 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-[width,height] duration-200 ease-out ${
+            isExpanded
+              ? "h-[min(90dvh,800px)] w-[min(560px,calc(100vw-2rem))]"
+              : "h-[560px] w-[380px]"
+          }`}
           aria-label="OnePoint Analytics Assistant"
         >
           <header className="flex items-start justify-between gap-3 bg-gradient-to-r from-slate-900 to-blue-700 px-4 py-4 text-white">
@@ -241,7 +163,16 @@ export function AnalyticsChatWidget() {
                 Ask questions about call volume, durations, unsuccessful calls, and daily trends.
               </p>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex shrink-0 flex-row items-start gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsExpanded((v) => !v)}
+                aria-expanded={isExpanded}
+                title={isExpanded ? "Collapse panel" : "Expand panel"}
+                className="rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-white/25"
+              >
+                {isExpanded ? "Collapse" : "Expand"}
+              </button>
               <button
                 type="button"
                 onClick={clearChat}
@@ -253,40 +184,28 @@ export function AnalyticsChatWidget() {
           </header>
 
           <div className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-sky-50 to-white">
-            <div className="grid grid-cols-3 gap-2 border-b border-slate-200 bg-white/85 px-4 py-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Calls Today</p>
-                <p className="mt-1 text-base font-bold text-slate-900">{kpis.callsToday}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Avg Duration</p>
-                <p className="mt-1 text-base font-bold text-slate-900">{kpis.avgDuration}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Unsuccessful</p>
-                <p className="mt-1 text-base font-bold text-slate-900">{kpis.unsuccessful}</p>
-              </div>
-            </div>
-
             <div className="flex flex-wrap gap-2 border-b border-slate-200 bg-white/90 px-4 py-2.5">
               <button
                 type="button"
-                onClick={() => setInput("Tell me the number of calls made today")}
-                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                onClick={() => void sendQuestion("Tell me the number of calls made today")}
+                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isLoading}
               >
                 Calls today
               </button>
               <button
                 type="button"
-                onClick={() => setInput("Tell me the average call duration for today")}
-                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                onClick={() => void sendQuestion("Tell me the average call duration for today")}
+                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isLoading}
               >
                 Average duration
               </button>
               <button
                 type="button"
-                onClick={() => setInput("Tell me the unsuccessful calls for today")}
-                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                onClick={() => void sendQuestion("Tell me the unsuccessful calls for today")}
+                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isLoading}
               >
                 Unsuccessful calls
               </button>
@@ -304,7 +223,7 @@ export function AnalyticsChatWidget() {
                 >
                   {message.role === "user"
                     ? message.content
-                    : assistantContentWithBoldNumbers(message.content)}
+                    : assistantContentWithFormatting(message.content)}
                 </div>
               ))}
               {isLoading ? (
@@ -344,6 +263,8 @@ export function AnalyticsChatWidget() {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
+        aria-expanded={isOpen}
+        aria-label={isOpen ? "Minimize analytics assistant" : "Open analytics assistant"}
         className="group relative h-[62px] w-[62px] rounded-[20px] bg-gradient-to-r from-blue-600 to-slate-900 text-2xl font-bold text-white shadow-[0_16px_40px_rgba(15,23,42,0.24)] hover:opacity-95"
       >
         <span className="absolute -left-[110px] bottom-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white opacity-95">

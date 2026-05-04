@@ -27,6 +27,7 @@
     "  width: 380px;",
     "  max-width: calc(100vw - 32px);",
     "  height: 560px;",
+    "  transition: width 0.2s ease, height 0.2s ease;",
     "  background: rgba(255, 255, 255, 0.96);",
     "  border: 1px solid rgba(226, 234, 242, 0.95);",
     "  border-radius: 22px;",
@@ -74,27 +75,54 @@
     ".fab-wrap { position: relative; margin-top: 12px; display: flex; justify-content: flex-end; }",
     ".fab-label { position: absolute; right: 74px; bottom: 12px; background: #0f172a; color: #fff; padding: 8px 11px; border-radius: 10px; font-size: 12px; box-shadow: 0 12px 30px rgba(15,23,42,0.18); }",
     ".fab { width: 62px; height: 62px; border: none; border-radius: 20px; background: linear-gradient(135deg, #2563eb 0%, #0f172a 100%); color: #fff; font-size: 24px; font-weight: 700; box-shadow: 0 16px 40px rgba(15,23,42,0.24); cursor: pointer; }",
+    ".chips-row { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #e2e8f0; padding: 10px 16px; background: rgba(255,255,255,0.9); flex-shrink: 0; }",
+    ".chip { border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 6px 12px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; }",
+    ".chip:hover { background: #dbeafe; }",
+    ".header-actions { display: flex; gap: 6px; align-items: flex-start; flex-shrink: 0; }",
+    ".panel.panel-expanded { width: min(560px, calc(100vw - 32px)); height: min(90dvh, 800px); max-height: min(90dvh, 800px); }",
   ].join("");
 
   var shell = document.createElement("div");
   shell.className = "shell";
 
   var panel = document.createElement("section");
-  panel.className = "panel";
+  panel.className = "panel hidden";
 
   var header = document.createElement("div");
   header.className = "header";
   header.innerHTML =
-    '<div><p class="title">OnePoint Analytics Assistant</p><p class="subtitle">Ask questions about call volume, durations, unsuccessful calls, and trends.</p></div>';
+    '<div><p class="title">OnePoint Analytics Assistant</p><p class="subtitle">Ask questions about call volume, durations, unsuccessful calls, and daily trends.</p></div>';
+
+  var headerActions = document.createElement("div");
+  headerActions.className = "header-actions";
+
+  var expandBtn = document.createElement("button");
+  expandBtn.className = "clear-btn";
+  expandBtn.type = "button";
+  expandBtn.textContent = "Expand";
+  expandBtn.setAttribute("aria-expanded", "false");
+  expandBtn.title = "Expand panel";
 
   var clearBtn = document.createElement("button");
   clearBtn.className = "clear-btn";
   clearBtn.type = "button";
   clearBtn.textContent = "Clear";
-  header.appendChild(clearBtn);
+  headerActions.appendChild(expandBtn);
+  headerActions.appendChild(clearBtn);
+  header.appendChild(headerActions);
+
+  expandBtn.addEventListener("click", function () {
+    var on = panel.classList.toggle("panel-expanded");
+    expandBtn.textContent = on ? "Collapse" : "Expand";
+    expandBtn.setAttribute("aria-expanded", on ? "true" : "false");
+    expandBtn.title = on ? "Collapse panel" : "Expand panel";
+  });
 
   var body = document.createElement("div");
   body.className = "body";
+
+  var chipsRow = document.createElement("div");
+  chipsRow.className = "chips-row";
 
   var chat = document.createElement("div");
   chat.className = "chat";
@@ -111,13 +139,19 @@
 
   var input = document.createElement("input");
   input.className = "input";
-  input.placeholder = "Ask about calls, durations, and trends...";
+  input.placeholder = "Ask about today's calls, average duration, failed calls, trends...";
   input.type = "text";
 
   var sendBtn = document.createElement("button");
   sendBtn.className = "send";
   sendBtn.type = "submit";
   sendBtn.textContent = "Send";
+
+  var chipDefs = [
+    { label: "Calls today", fill: "Tell me the number of calls made today" },
+    { label: "Average duration", fill: "Tell me the average call duration for today" },
+    { label: "Unsuccessful calls", fill: "Tell me the unsuccessful calls for today" },
+  ];
 
   inputRow.appendChild(input);
   inputRow.appendChild(sendBtn);
@@ -129,6 +163,7 @@
   inputWrap.appendChild(inputRow);
   inputWrap.appendChild(footer);
 
+  body.appendChild(chipsRow);
   body.appendChild(chat);
   body.appendChild(typing);
   body.appendChild(inputWrap);
@@ -145,6 +180,8 @@
   fab.className = "fab";
   fab.type = "button";
   fab.textContent = "✦";
+  fab.setAttribute("aria-expanded", "false");
+  fab.setAttribute("aria-label", "Open analytics assistant");
   fabWrap.appendChild(fabLabel);
   fabWrap.appendChild(fab);
 
@@ -181,6 +218,22 @@
     }
   }
 
+  function appendAssistantFormatted(container, text) {
+    var segments = text.split(/(\*\*[\s\S]*?\*\*)/g);
+    for (var si = 0; si < segments.length; si++) {
+      var seg = segments[si];
+      if (!seg) continue;
+      var bm = seg.match(/^\*\*([\s\S]*?)\*\*$/);
+      if (bm) {
+        var st = document.createElement("strong");
+        st.textContent = bm[1];
+        container.appendChild(st);
+      } else {
+        appendAssistantTextWithBoldNumbers(container, seg);
+      }
+    }
+  }
+
   function renderMessages() {
     chat.innerHTML = "";
     for (var i = 0; i < messages.length; i++) {
@@ -190,7 +243,7 @@
       if (item.role === "user") {
         node.textContent = item.text;
       } else {
-        appendAssistantTextWithBoldNumbers(node, item.text);
+        appendAssistantFormatted(node, item.text);
       }
       chat.appendChild(node);
     }
@@ -260,6 +313,20 @@
     }
   }
 
+  for (var cj = 0; cj < chipDefs.length; cj++) {
+    (function (def) {
+      var chipBtn = document.createElement("button");
+      chipBtn.type = "button";
+      chipBtn.className = "chip";
+      chipBtn.textContent = def.label;
+      chipBtn.addEventListener("click", function () {
+        if (isLoading) return;
+        void askQuestion(def.fill);
+      });
+      chipsRow.appendChild(chipBtn);
+    })(chipDefs[cj]);
+  }
+
   inputWrap.addEventListener("submit", function (event) {
     event.preventDefault();
     var text = input.value.trim();
@@ -277,6 +344,18 @@
 
   fab.addEventListener("click", function () {
     panel.classList.toggle("hidden");
+    var closed = panel.classList.contains("hidden");
+    fab.setAttribute("aria-expanded", closed ? "false" : "true");
+    fab.setAttribute(
+      "aria-label",
+      closed ? "Open analytics assistant" : "Minimize analytics assistant",
+    );
+    if (closed) {
+      panel.classList.remove("panel-expanded");
+      expandBtn.textContent = "Expand";
+      expandBtn.setAttribute("aria-expanded", "false");
+      expandBtn.title = "Expand panel";
+    }
   });
 
   renderMessages();
