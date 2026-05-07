@@ -351,18 +351,45 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
-/** Human-readable duration for narrative answers (e.g. chip quick-actions for “today”). */
 function formatDurationWords(totalSeconds: number): string {
-  const s = Math.max(0, Math.round(Number(totalSeconds)));
-  const minutes = Math.floor(s / 60);
-  const seconds = s % 60;
-  if (minutes === 0) return `${seconds} second${seconds === 1 ? "" : "s"}`;
-  if (seconds === 0) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const safeSeconds = Math.max(0, Math.round(totalSeconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  if (minutes === 0) {
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  }
+  if (seconds === 0) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
   return `${minutes} minute${minutes === 1 ? "" : "s"} ${seconds} second${seconds === 1 ? "" : "s"}`;
 }
 
 function isNarrativeTodayAnswer(dateFilter: DateFilterKey, customDateLabel: string | null): boolean {
   return dateFilter === "today" && customDateLabel === null;
+}
+
+function isNarrativeYesterdayAnswer(dateFilter: DateFilterKey, customDateLabel: string | null): boolean {
+  return dateFilter === "yesterday" && customDateLabel === null;
+}
+
+function getNarrativeCallPeriod(dateFilter: DateFilterKey): string | null {
+  switch (dateFilter) {
+    case "today":
+      return "today";
+    case "yesterday":
+      return "yesterday";
+    case "this_week":
+      return "this week";
+    case "last_week":
+      return "last week";
+    case "this_month":
+      return "this month";
+    case "last_month":
+      return "last month";
+    default:
+      return null;
+  }
 }
 
 function buildAnswer(
@@ -376,19 +403,32 @@ function buildAnswer(
 
   switch (intent) {
     case "calls_today":
-      if (isNarrativeTodayAnswer(dateFilter, customDateLabel)) {
-        const n = toNumber(first.total_calls);
-        const bold = n === 1 ? "1 call today" : `${n} calls today`;
-        return `There were **${bold}** across all tracked lines.`;
+      if (customDateLabel === null) {
+        const period = getNarrativeCallPeriod(dateFilter);
+        if (period) {
+          const n = toNumber(first.total_calls);
+          const bold = n === 1 ? `1 call ${period}` : `${n} calls ${period}`;
+          return `There were **${bold}** across all tracked lines.`;
+        }
       }
       return `Total calls for ${label}: ${toNumber(first.total_calls)}.`;
     case "calls_this_week":
+      if (customDateLabel === null) {
+        const period = getNarrativeCallPeriod(dateFilter);
+        if (period) {
+          const n = toNumber(first.total_calls);
+          const bold = n === 1 ? `1 call ${period}` : `${n} calls ${period}`;
+          return `There were **${bold}** across all tracked lines.`;
+        }
+      }
       return `Total calls for ${label}: ${toNumber(first.total_calls)}.`;
     case "average_duration":
-      if (isNarrativeTodayAnswer(dateFilter, customDateLabel)) {
-        const sec = toNumber(first.average_duration_seconds);
-        const bold = formatDurationWords(sec);
-        return `The average call duration for today is **${bold}**.`;
+      if (customDateLabel === null) {
+        const period = getNarrativeCallPeriod(dateFilter);
+        if (period) {
+          const sec = toNumber(first.average_duration_seconds);
+          return `The average call duration for ${period} is **${formatDurationWords(sec)}**.`;
+        }
       }
       return `Average call duration for ${label}: ${toNumber(first.average_duration_seconds)} seconds.`;
     case "unsuccessful_calls":
@@ -396,6 +436,19 @@ function buildAnswer(
         const n = toNumber(first.unsuccessful_calls);
         const bold = n === 1 ? "1 unsuccessful call today" : `${n} unsuccessful calls today`;
         return `There were **${bold}**, including missed and incomplete interactions.`;
+      }
+      if (isNarrativeYesterdayAnswer(dateFilter, customDateLabel)) {
+        const n = toNumber(first.unsuccessful_calls);
+        const bold = n === 1 ? "1 unsuccessful call yesterday" : `${n} unsuccessful calls yesterday`;
+        return `There were **${bold}**, including missed and incomplete interactions.`;
+      }
+      if (customDateLabel === null) {
+        const period = getNarrativeCallPeriod(dateFilter);
+        if (period && period !== "today" && period !== "yesterday") {
+          const n = toNumber(first.unsuccessful_calls);
+          const bold = n === 1 ? `1 unsuccessful call ${period}` : `${n} unsuccessful calls ${period}`;
+          return `There were **${bold}**, including missed and incomplete interactions.`;
+        }
       }
       return `Unsuccessful calls for ${label}: ${toNumber(first.unsuccessful_calls)}.`;
     case "calls_by_day":

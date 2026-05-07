@@ -1,6 +1,6 @@
 # Analytics Chat Widget
 
-Standalone Next.js app for an embeddable analytics chat widget (OnePoint Analytics Assistant).
+Standalone Next.js app for an embeddable analytics chat widget (OnePoint Call Analytics).
 
 ## Setup Commands
 

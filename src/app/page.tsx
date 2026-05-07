@@ -7,7 +7,7 @@ export default function Home() {
         <div className="w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <h1 className="text-2xl font-semibold text-slate-900">Analytics Chat Widget Demo</h1>
           <p className="mt-2 text-sm text-slate-600">
-            This standalone app hosts the floating OnePoint analytics assistant widget for dashboard embedding.
+            This standalone app hosts the floating OnePoint Call Analytics widget for dashboard embedding.
           </p>
         </div>
       </main>

@@ -60,7 +60,7 @@ const starterMessages: ChatMessage[] = [
     id: 1,
     role: "assistant",
     content:
-      "Hi, I am your call analytics assistant. I can summarize call activity, average durations, unsuccessful calls, and trends.",
+      "Hi there, I'm Sally, your Analytics AI Assistant. I can summarise call activity, average durations, unsuccessful calls etc.",
   },
 ];
 
@@ -151,34 +151,89 @@ export function AnalyticsChatWidget() {
         <section
           className={`max-w-[calc(100vw-2rem)] flex flex-col overflow-hidden rounded-[22px] border border-slate-200/90 bg-white/95 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-[width,height] duration-200 ease-out ${
             isExpanded
-              ? "h-[min(90dvh,800px)] w-[min(560px,calc(100vw-2rem))]"
+              ? "h-[min(90dvh,800px)] w-[min(600px,calc(100vw-2rem))]"
               : "h-[560px] w-[380px]"
           }`}
-          aria-label="OnePoint Analytics Assistant"
+          aria-label="OnePoint Call Analytics"
         >
           <header className="flex items-start justify-between gap-3 bg-gradient-to-r from-slate-900 to-blue-700 px-4 py-4 text-white">
             <div>
-              <h2 className="text-sm font-bold sm:text-base">OnePoint Analytics Assistant</h2>
+              <h2 className="text-sm font-bold sm:text-base">OnePoint Call Analytics</h2>
               <p className="mt-1 text-xs text-blue-100">
-                Ask questions about call volume, durations, unsuccessful calls, and daily trends.
+                Ask Sally questions in plain English about call volume, durations, unsuccessful calls, and daily trends.
               </p>
             </div>
             <div className="flex shrink-0 flex-row items-start gap-1.5">
               <button
                 type="button"
-                onClick={() => setIsExpanded((v) => !v)}
-                aria-expanded={isExpanded}
-                title={isExpanded ? "Collapse panel" : "Expand panel"}
-                className="rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-white/25"
+                onClick={clearChat}
+                aria-label="Clear chat"
+                title="Clear chat"
+                className="rounded-lg border border-white/25 bg-white/15 p-1.5 hover:bg-white/25"
               >
-                {isExpanded ? "Collapse" : "Expand"}
+                <svg
+                  viewBox="0 0 16 16"
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2 4.5H14" />
+                  <path d="M6 2.5H10" />
+                  <path d="M3.5 4.5L4.2 13.5C4.25 14.1 4.75 14.5 5.35 14.5H10.65C11.25 14.5 11.75 14.1 11.8 13.5L12.5 4.5" />
+                  <path d="M6.5 7V12" />
+                  <path d="M9.5 7V12" />
+                </svg>
               </button>
               <button
                 type="button"
-                onClick={clearChat}
-                className="rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold hover:bg-white/25"
+                onClick={() => setIsExpanded((v) => !v)}
+                aria-expanded={isExpanded}
+                aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
+                title={isExpanded ? "Collapse panel" : "Expand panel"}
+                className="rounded-lg border border-white/25 bg-white/15 p-1.5 hover:bg-white/25"
               >
-                Clear
+                <svg
+                  viewBox="0 0 16 16"
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {isExpanded ? (
+                    <>
+                      <path d="M6.5 1.5H1.5V6.5" />
+                      <path d="M1.5 1.5L7.25 7.25" />
+                      <path d="M9.5 14.5H14.5V9.5" />
+                      <path d="M14.5 14.5L8.75 8.75" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M9.5 1.5H14.5V6.5" />
+                      <path d="M14.5 1.5L8.75 7.25" />
+                      <path d="M6.5 14.5H1.5V9.5" />
+                      <path d="M1.5 14.5L7.25 8.75" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  setIsExpanded(false);
+                }}
+                aria-label="Minimize panel"
+                title="Minimize panel"
+                className="rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-[11px] font-normal hover:bg-white/25"
+              >
+                -
               </button>
             </div>
           </header>
@@ -250,10 +305,27 @@ export function AnalyticsChatWidget() {
                   {isLoading ? "Sending..." : "Send"}
                 </button>
               </div>
-              <p className="mt-2 text-center text-[11px] leading-relaxed text-slate-500">
-                Powered by AI MESHLABS
+              <p className="mt-2 text-center text-[12px] leading-relaxed text-slate-500">
+                Powered by{" "}
+                <a
+                  href="https://aimeshlabs.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold underline hover:no-underline"
+                >
+                  AI MESHLABS
+                </a>
                 <br />
-                ©2026 OnePoint Health. All rights reserved.
+                ©2026{" "}
+                <a
+                  href="https://onepointhealth.com.au/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold underline hover:no-underline"
+                >
+                  OnePoint Health
+                </a>
+                . All rights reserved.
               </p>
             </form>
           </div>
@@ -264,11 +336,15 @@ export function AnalyticsChatWidget() {
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
-        aria-label={isOpen ? "Minimize analytics assistant" : "Open analytics assistant"}
+        aria-label={isOpen ? "Minimize OnePoint Call Analytics" : "Open OnePoint Call Analytics"}
         className="group relative h-[62px] w-[62px] rounded-[20px] bg-gradient-to-r from-blue-600 to-slate-900 text-2xl font-bold text-white shadow-[0_16px_40px_rgba(15,23,42,0.24)] hover:opacity-95"
       >
-        <span className="absolute -left-[110px] bottom-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white opacity-95">
-          Analytics AI
+        <span className="absolute -left-[76px] bottom-4 flex h-[38px] w-[68px] items-center justify-center rounded-full bg-slate-900 px-2 py-1.5 text-[11px] font-medium text-white opacity-95">
+          Ask Me
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-[3px] right-[7px] h-2.5 w-2.5 rotate-45 rounded-br-[3px] bg-slate-900"
+          />
         </span>
         ✦
       </button>

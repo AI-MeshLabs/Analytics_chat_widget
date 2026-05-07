@@ -71,15 +71,16 @@
     ".input { flex: 1; border: none; outline: none; background: transparent; font-size: 13px; color: #172033; }",
     ".send { border: none; border-radius: 10px; background: #2563eb; color: #fff; font-weight: 700; font-size: 12px; padding: 9px 12px; cursor: pointer; }",
     ".send[disabled], .input[disabled] { opacity: 0.7; cursor: not-allowed; }",
-    ".footer { margin-top: 8px; font-size: 11px; color: #6b7280; text-align: center; line-height: 1.45; }",
+    ".footer { margin-top: 8px; font-size: 12px; color: #6b7280; text-align: center; line-height: 1.45; }",
     ".fab-wrap { position: relative; margin-top: 12px; display: flex; justify-content: flex-end; }",
-    ".fab-label { position: absolute; right: 74px; bottom: 12px; background: #0f172a; color: #fff; padding: 8px 11px; border-radius: 10px; font-size: 12px; box-shadow: 0 12px 30px rgba(15,23,42,0.18); }",
+    ".fab-label { position: absolute; right: 56px; bottom: 20px; width: 68px; height: 38px; background: #0f172a; color: #fff; border-radius: 999px; font-size: 11px; display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 30px rgba(15,23,42,0.18); }",
+    ".fab-label::after { content: ''; position: absolute; right: 7px; bottom: -3px; width: 10px; height: 10px; background: #0f172a; transform: rotate(45deg); border-bottom-right-radius: 3px; }",
     ".fab { width: 62px; height: 62px; border: none; border-radius: 20px; background: linear-gradient(135deg, #2563eb 0%, #0f172a 100%); color: #fff; font-size: 24px; font-weight: 700; box-shadow: 0 16px 40px rgba(15,23,42,0.24); cursor: pointer; }",
     ".chips-row { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #e2e8f0; padding: 10px 16px; background: rgba(255,255,255,0.9); flex-shrink: 0; }",
     ".chip { border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 6px 12px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; }",
     ".chip:hover { background: #dbeafe; }",
     ".header-actions { display: flex; gap: 6px; align-items: flex-start; flex-shrink: 0; }",
-    ".panel.panel-expanded { width: min(560px, calc(100vw - 32px)); height: min(90dvh, 800px); max-height: min(90dvh, 800px); }",
+    ".panel.panel-expanded { width: min(600px, calc(100vw - 32px)); height: min(90dvh, 800px); max-height: min(90dvh, 800px); }",
   ].join("");
 
   var shell = document.createElement("div");
@@ -91,31 +92,59 @@
   var header = document.createElement("div");
   header.className = "header";
   header.innerHTML =
-    '<div><p class="title">OnePoint Analytics Assistant</p><p class="subtitle">Ask questions about call volume, durations, unsuccessful calls, and daily trends.</p></div>';
+    '<div><p class="title">OnePoint Call Analytics</p><p class="subtitle">Ask Sally questions in plain English about call volume, durations, unsuccessful calls, and daily trends.</p></div>';
 
   var headerActions = document.createElement("div");
   headerActions.className = "header-actions";
-
-  var expandBtn = document.createElement("button");
-  expandBtn.className = "clear-btn";
-  expandBtn.type = "button";
-  expandBtn.textContent = "Expand";
-  expandBtn.setAttribute("aria-expanded", "false");
-  expandBtn.title = "Expand panel";
+  var clearIconHtml =
+    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5H14"></path><path d="M6 2.5H10"></path><path d="M3.5 4.5L4.2 13.5C4.25 14.1 4.75 14.5 5.35 14.5H10.65C11.25 14.5 11.75 14.1 11.8 13.5L12.5 4.5"></path><path d="M6.5 7V12"></path><path d="M9.5 7V12"></path></svg>';
+  var expandIconHtml =
+    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5H14.5V6.5"></path><path d="M14.5 1.5L8.75 7.25"></path><path d="M6.5 14.5H1.5V9.5"></path><path d="M1.5 14.5L7.25 8.75"></path></svg>';
+  var collapseIconHtml =
+    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1.5H1.5V6.5"></path><path d="M1.5 1.5L7.25 7.25"></path><path d="M9.5 14.5H14.5V9.5"></path><path d="M14.5 14.5L8.75 8.75"></path></svg>';
 
   var clearBtn = document.createElement("button");
   clearBtn.className = "clear-btn";
   clearBtn.type = "button";
-  clearBtn.textContent = "Clear";
-  headerActions.appendChild(expandBtn);
+  clearBtn.innerHTML = clearIconHtml;
+  clearBtn.style.color = "#ffffff";
+  clearBtn.setAttribute("aria-label", "Clear chat");
+  clearBtn.title = "Clear chat";
+
+  var expandBtn = document.createElement("button");
+  expandBtn.className = "clear-btn";
+  expandBtn.type = "button";
+  expandBtn.innerHTML = expandIconHtml;
+  expandBtn.style.color = "#ffffff";
+  expandBtn.setAttribute("aria-expanded", "false");
+  expandBtn.setAttribute("aria-label", "Expand panel");
+  expandBtn.title = "Expand panel";
+
+  var minimizeBtn = document.createElement("button");
+  minimizeBtn.className = "clear-btn";
+  minimizeBtn.type = "button";
+  minimizeBtn.textContent = "-";
+  minimizeBtn.style.fontWeight = "400";
+  minimizeBtn.setAttribute("aria-label", "Minimize panel");
+  minimizeBtn.title = "Minimize panel";
   headerActions.appendChild(clearBtn);
+  headerActions.appendChild(expandBtn);
+  headerActions.appendChild(minimizeBtn);
   header.appendChild(headerActions);
 
   expandBtn.addEventListener("click", function () {
     var on = panel.classList.toggle("panel-expanded");
-    expandBtn.textContent = on ? "Collapse" : "Expand";
+    expandBtn.innerHTML = on ? collapseIconHtml : expandIconHtml;
     expandBtn.setAttribute("aria-expanded", on ? "true" : "false");
+    expandBtn.setAttribute("aria-label", on ? "Collapse panel" : "Expand panel");
     expandBtn.title = on ? "Collapse panel" : "Expand panel";
+  });
+
+  clearBtn.addEventListener("click", function () {
+    messages = initialMessages.slice();
+    input.value = "";
+    setLoading(false);
+    renderMessages();
   });
 
   var body = document.createElement("div");
@@ -158,7 +187,8 @@
 
   var footer = document.createElement("p");
   footer.className = "footer";
-  footer.innerHTML = "Powered by AI MESHLABS<br>&copy;2026 OnePoint Health. All rights reserved.";
+  footer.innerHTML =
+    'Powered by <a href="https://aimeshlabs.com/" target="_blank" rel="noopener noreferrer"><strong>AI MESHLABS</strong></a><br>&copy;2026 <a href="https://onepointhealth.com.au/" target="_blank" rel="noopener noreferrer"><strong>OnePoint Health</strong></a>. All rights reserved.';
 
   inputWrap.appendChild(inputRow);
   inputWrap.appendChild(footer);
@@ -175,13 +205,13 @@
   fabWrap.className = "fab-wrap";
   var fabLabel = document.createElement("div");
   fabLabel.className = "fab-label";
-  fabLabel.textContent = "Analytics AI";
+  fabLabel.textContent = "Ask Me";
   var fab = document.createElement("button");
   fab.className = "fab";
   fab.type = "button";
   fab.textContent = "✦";
   fab.setAttribute("aria-expanded", "false");
-  fab.setAttribute("aria-label", "Open analytics assistant");
+  fab.setAttribute("aria-label", "Open OnePoint Call Analytics");
   fabWrap.appendChild(fabLabel);
   fabWrap.appendChild(fab);
 
@@ -193,7 +223,7 @@
   var initialMessages = [
     {
       role: "bot",
-      text: "Hi, I am your call analytics assistant. I can summarize call activity, average durations, unsuccessful calls, and trends.",
+      text: "Hi there, I'm Sally, your Analytics AI Assistant. I can summarise call activity, average durations, unsuccessful calls etc.",
     },
   ];
 
@@ -335,11 +365,15 @@
     askQuestion(text);
   });
 
-  clearBtn.addEventListener("click", function () {
-    messages = initialMessages.slice();
-    input.value = "";
-    setLoading(false);
-    renderMessages();
+  minimizeBtn.addEventListener("click", function () {
+    panel.classList.add("hidden");
+    panel.classList.remove("panel-expanded");
+    expandBtn.innerHTML = expandIconHtml;
+    expandBtn.setAttribute("aria-expanded", "false");
+    expandBtn.setAttribute("aria-label", "Expand panel");
+    expandBtn.title = "Expand panel";
+    fab.setAttribute("aria-expanded", "false");
+    fab.setAttribute("aria-label", "Open OnePoint Call Analytics");
   });
 
   fab.addEventListener("click", function () {
@@ -348,12 +382,13 @@
     fab.setAttribute("aria-expanded", closed ? "false" : "true");
     fab.setAttribute(
       "aria-label",
-      closed ? "Open analytics assistant" : "Minimize analytics assistant",
+      closed ? "Open OnePoint Call Analytics" : "Minimize OnePoint Call Analytics",
     );
     if (closed) {
       panel.classList.remove("panel-expanded");
-      expandBtn.textContent = "Expand";
+      expandBtn.innerHTML = expandIconHtml;
       expandBtn.setAttribute("aria-expanded", "false");
+      expandBtn.setAttribute("aria-label", "Expand panel");
       expandBtn.title = "Expand panel";
     }
   });
