@@ -9,10 +9,11 @@ type QueryTemplateResult = {
 };
 
 const DATE_FILTER_CLAUSES: Record<DateFilterKey, string> = {
-  today: "call_started_at >= CURRENT_DATE AND call_started_at < CURRENT_DATE + INTERVAL '1 day'",
-  yesterday: "call_started_at >= CURRENT_DATE - INTERVAL '1 day' AND call_started_at < CURRENT_DATE",
-  this_week: "call_started_at >= DATE_TRUNC('week', CURRENT_DATE)",
-  this_month: "call_started_at >= DATE_TRUNC('month', CURRENT_DATE)",
+  today: "call_date >= CURRENT_DATE AND call_date < CURRENT_DATE + INTERVAL '1 day'",
+  yesterday:
+    "call_date >= CURRENT_DATE - INTERVAL '1 day' AND call_date < CURRENT_DATE",
+  this_week: "call_date >= DATE_TRUNC('week', CURRENT_DATE)",
+  this_month: "call_date >= DATE_TRUNC('month', CURRENT_DATE)",
 };
 
 const UNSAFE_SQL_PATTERN =
@@ -51,7 +52,7 @@ export function getSafeAnalyticsQueryTemplate(
     case "calls_today":
       sql = `
         SELECT COUNT(*)::int AS total_calls
-        FROM onepoint.call_data
+        FROM onepoint.calls
         WHERE ${filterClause}
       `;
       break;
@@ -59,15 +60,15 @@ export function getSafeAnalyticsQueryTemplate(
     case "calls_this_week":
       sql = `
         SELECT COUNT(*)::int AS total_calls
-        FROM onepoint.call_data
-        WHERE call_started_at >= DATE_TRUNC('week', CURRENT_DATE)
+        FROM onepoint.calls
+        WHERE call_date >= DATE_TRUNC('week', CURRENT_DATE)
       `;
       break;
 
     case "average_duration":
       sql = `
-        SELECT COALESCE(AVG(duration_seconds), 0)::int AS average_duration_seconds
-        FROM onepoint.call_data
+        SELECT COALESCE(AVG(duration_secs), 0)::int AS average_duration_seconds
+        FROM onepoint.calls
         WHERE ${filterClause}
       `;
       break;
@@ -83,10 +84,10 @@ export function getSafeAnalyticsQueryTemplate(
 
     case "calls_by_day":
       sql = `
-        SELECT DATE_TRUNC('day', call_started_at)::date AS call_date, COUNT(*)::int AS total_calls
-        FROM onepoint.call_data
+        SELECT DATE_TRUNC('day', call_date)::date AS call_date, COUNT(*)::int AS total_calls
+        FROM onepoint.calls
         WHERE ${filterClause}
-        GROUP BY DATE_TRUNC('day', call_started_at)::date
+        GROUP BY DATE_TRUNC('day', call_date)::date
         ORDER BY call_date DESC
         LIMIT 31
       `;
@@ -94,10 +95,10 @@ export function getSafeAnalyticsQueryTemplate(
 
     case "calls_by_agent":
       sql = `
-        SELECT COALESCE(agent_name, 'Unknown') AS agent_name, COUNT(*)::int AS total_calls
-        FROM onepoint.call_data
+        SELECT COALESCE(NULLIF(booking_practitioner, ''), NULLIF(name, ''), 'Unknown') AS agent_name, COUNT(*)::int AS total_calls
+        FROM onepoint.calls
         WHERE ${filterClause}
-        GROUP BY COALESCE(agent_name, 'Unknown')
+        GROUP BY COALESCE(NULLIF(booking_practitioner, ''), NULLIF(name, ''), 'Unknown')
         ORDER BY total_calls DESC
         LIMIT 25
       `;
@@ -105,10 +106,10 @@ export function getSafeAnalyticsQueryTemplate(
 
     case "top_dispositions":
       sql = `
-        SELECT COALESCE(disposition, 'Unknown') AS disposition, COUNT(*)::int AS total_count
-        FROM onepoint.call_data
+        SELECT COALESCE(NULLIF(call_type, ''), NULLIF(status, ''), 'Unknown') AS disposition, COUNT(*)::int AS total_count
+        FROM onepoint.calls
         WHERE ${filterClause}
-        GROUP BY COALESCE(disposition, 'Unknown')
+        GROUP BY COALESCE(NULLIF(call_type, ''), NULLIF(status, ''), 'Unknown')
         ORDER BY total_count DESC
         LIMIT 10
       `;
@@ -116,10 +117,10 @@ export function getSafeAnalyticsQueryTemplate(
 
     case "longest_calls":
       sql = `
-        SELECT call_id, duration_seconds, call_started_at
-        FROM onepoint.call_data
+        SELECT id AS call_id, duration_secs AS duration_seconds, call_date AS call_started_at
+        FROM onepoint.calls
         WHERE ${filterClause}
-        ORDER BY duration_seconds DESC NULLS LAST
+        ORDER BY duration_secs DESC NULLS LAST
         LIMIT 20
       `;
       break;
@@ -127,7 +128,7 @@ export function getSafeAnalyticsQueryTemplate(
     case "call_status_summary":
       sql = `
         SELECT COALESCE(status, 'Unknown') AS status, COUNT(*)::int AS total_count
-        FROM onepoint.call_data
+        FROM onepoint.calls
         WHERE ${filterClause}
         GROUP BY COALESCE(status, 'Unknown')
         ORDER BY total_count DESC

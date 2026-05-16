@@ -38,11 +38,11 @@ export default function DemoEmbedPage() {
           <pre className="mt-4 overflow-auto rounded-xl bg-slate-900 p-4 text-xs text-slate-100">
             {`<script>
   window.AnalyticsWidgetConfig = {
-    apiBase: "http://46.250.246.195:4003",
+    apiBase: "http://your-domain.com",
     token: ""
   };
 </script>
-<script src="http://46.250.246.195:4003/analytics-widget.js"></script>`}
+<script src="http://your-domain.com/analytics-widget.js"></script>`}
           </pre>
         </section>
       </main>
@@ -55,7 +55,10 @@ export default function DemoEmbedPage() {
           };
         `}
       </Script>
-      <Script src="/analytics-widget.js" strategy="afterInteractive" />
+      <Script
+        src="/analytics-widget.js?v=20260516-responsive"
+        strategy="afterInteractive"
+      />
     </div>
   );
 }

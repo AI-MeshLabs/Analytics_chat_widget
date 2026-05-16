@@ -9,6 +9,7 @@ export type CustomDateRange = {
 const ANALYTICS_SCHEMA = "onepoint";
 const CALL_DATA_TABLE = "call_data";
 const CALLS_TABLE = "calls";
+const CALL_DATE_COLUMN = "call_date";
 
 let supabaseSingleton: SupabaseClient | null = null;
 
@@ -32,6 +33,7 @@ function getSupabase(): SupabaseClient {
 type DateFilterQueryable = {
   gte: (column: string, value: string) => DateFilterQueryable;
   lt: (column: string, value: string) => DateFilterQueryable;
+  in: (column: string, values: string[]) => DateFilterQueryable;
 };
 
 function getDateRange(dateFilter: DateFilterKey): { start: Date; end: Date } {
@@ -89,13 +91,16 @@ function getDateRange(dateFilter: DateFilterKey): { start: Date; end: Date } {
   return { start, end };
 }
 
-function applyDateFilter<T extends DateFilterQueryable>(
+/** Filter on onepoint.calls.call_date (when the call happened). */
+function applyCallDateFilter<T extends DateFilterQueryable>(
   query: T,
   dateFilter: DateFilterKey,
   customDateRange?: CustomDateRange,
 ): T {
   const { start, end } = customDateRange ?? getDateRange(dateFilter);
-  return query.gte("created_at", start.toISOString()).lt("created_at", end.toISOString()) as T;
+  return query
+    .gte(CALL_DATE_COLUMN, start.toISOString())
+    .lt(CALL_DATE_COLUMN, end.toISOString()) as T;
 }
 
 function aggregateCountByKey(
@@ -124,15 +129,39 @@ function isMissingColumnError(error: unknown): boolean {
   return message.includes("column") && message.includes("does not exist");
 }
 
-async function selectWithDateFilter(
-  table: string,
+function getAgentLabel(row: Record<string, unknown>): string {
+  const candidate = row.booking_practitioner ?? row.agent_name ?? row.name;
+  if (candidate == null || candidate === "") return "Unknown";
+  return String(candidate);
+}
+
+function getDispositionLabel(row: Record<string, unknown>): string {
+  const candidate = row.disposition ?? row.call_type ?? row.status;
+  if (candidate == null || candidate === "") return "Unknown";
+  return String(candidate);
+}
+
+function getDurationSeconds(row: Record<string, unknown>): number {
+  const raw = row.duration_secs ?? row.duration_seconds;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function toCallDateKey(raw: unknown): string | null {
+  if (!raw) return null;
+  const parsed = new Date(String(raw));
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+async function selectCallsWithDateFilter(
   selectColumns: string,
   dateFilter: DateFilterKey,
   customDateRange?: CustomDateRange,
   options?: { limit?: number },
 ): Promise<Array<Record<string, unknown>>> {
-  let query = getSupabase().schema(ANALYTICS_SCHEMA).from(table).select(selectColumns);
-  query = applyDateFilter(query, dateFilter, customDateRange);
+  let query = getSupabase().schema(ANALYTICS_SCHEMA).from(CALLS_TABLE).select(selectColumns);
+  query = applyCallDateFilter(query, dateFilter, customDateRange);
   if (options?.limit != null) {
     query = query.limit(options.limit);
   }
@@ -141,8 +170,37 @@ async function selectWithDateFilter(
   return (data ?? []) as unknown as Array<Record<string, unknown>>;
 }
 
-async function countWithDateFilter(
-  table: string,
+async function getCallIdsInDateRange(
+  dateFilter: DateFilterKey,
+  customDateRange?: CustomDateRange,
+): Promise<string[]> {
+  const rows = await selectCallsWithDateFilter("id", dateFilter, customDateRange);
+  return rows.map((row) => String(row.id ?? "")).filter(Boolean);
+}
+
+async function selectCallDataWithDateFilter(
+  selectColumns: string,
+  dateFilter: DateFilterKey,
+  customDateRange?: CustomDateRange,
+  options?: { limit?: number },
+): Promise<Array<Record<string, unknown>>> {
+  const callIds = await getCallIdsInDateRange(dateFilter, customDateRange);
+  if (!callIds.length) return [];
+
+  let query = getSupabase()
+    .schema(ANALYTICS_SCHEMA)
+    .from(CALL_DATA_TABLE)
+    .select(selectColumns)
+    .in("call_id", callIds);
+  if (options?.limit != null) {
+    query = query.limit(options.limit);
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as unknown as Array<Record<string, unknown>>;
+}
+
+async function countCallsWithDateFilter(
   dateFilter: DateFilterKey,
   customDateRange?: CustomDateRange,
   options?: {
@@ -152,12 +210,11 @@ async function countWithDateFilter(
     };
   },
 ): Promise<number> {
-  // Use * so count works if the table has no `id` column (e.g. only call_id).
   let query = getSupabase()
     .schema(ANALYTICS_SCHEMA)
-    .from(table)
+    .from(CALLS_TABLE)
     .select("*", { count: "exact", head: true });
-  query = applyDateFilter(query, dateFilter, customDateRange);
+  query = applyCallDateFilter(query, dateFilter, customDateRange);
   if (options?.in) {
     query = query.in(options.in.column, options.in.values);
   }
@@ -176,28 +233,26 @@ export async function runCallDetailsReadQuery(
       case "calls_today":
       case "calls_this_week": {
         const countFilter = intent === "calls_this_week" ? "this_week" : dateFilter;
-        const callsCount = await countWithDateFilter(CALLS_TABLE, countFilter, customDateRange);
+        const callsCount = await countCallsWithDateFilter(countFilter, customDateRange);
         return [{ total_calls: callsCount }];
       }
 
       case "average_duration": {
-        /** Cap rows so KPI polling cannot download unbounded transcripts (was causing multi‑minute hangs). */
         const durationSampleLimit = 8000;
-        const [callDataRows, callsRows] = await Promise.all([
-          selectWithDateFilter(CALL_DATA_TABLE, "transcript", dateFilter, customDateRange, {
+        const [callsRows, callDataRows] = await Promise.all([
+          selectCallsWithDateFilter("duration_secs", dateFilter, customDateRange, {
             limit: durationSampleLimit,
           }),
-          selectWithDateFilter(CALLS_TABLE, "duration_seconds", dateFilter, customDateRange, {
+          selectCallDataWithDateFilter("transcript", dateFilter, customDateRange, {
             limit: durationSampleLimit,
-          }).catch(() => []),
+          }),
         ]);
+
+        const explicitDurations = callsRows.map(getDurationSeconds).filter((value) => value > 0);
         const transcriptEstimates = callDataRows
           .map((row) => String(row.transcript ?? "").trim())
           .map((transcript) => (transcript ? Math.round(transcript.split(/\s+/).length / 2.5) : 0));
 
-        const explicitDurations = callsRows
-          .map((row) => Number(row.duration_seconds))
-          .filter((value) => Number.isFinite(value) && value >= 0);
         const allDurations = [...explicitDurations, ...transcriptEstimates];
         const total = allDurations.reduce((sum, value) => sum + value, 0);
         const average = allDurations.length ? Math.round(total / allDurations.length) : 0;
@@ -205,19 +260,18 @@ export async function runCallDetailsReadQuery(
       }
 
       case "unsuccessful_calls": {
-        const count = await countWithDateFilter(CALLS_TABLE, dateFilter, customDateRange, {
+        const count = await countCallsWithDateFilter(dateFilter, customDateRange, {
           in: { column: "status", values: ["failed", "missed", "incomplete", "dropped"] },
         }).catch(() => 0);
         return [{ unsuccessful_calls: count }];
       }
 
       case "calls_by_day": {
-        const data = await selectWithDateFilter(CALLS_TABLE, "created_at", dateFilter, customDateRange).catch(() => []);
+        const data = await selectCallsWithDateFilter(CALL_DATE_COLUMN, dateFilter, customDateRange);
         const counts = new Map<string, number>();
         for (const row of data) {
-          const callDateRaw = row.created_at;
-          if (!callDateRaw) continue;
-          const callDate = new Date(String(callDateRaw)).toISOString().slice(0, 10);
+          const callDate = toCallDateKey(row[CALL_DATE_COLUMN]);
+          if (!callDate) continue;
           counts.set(callDate, (counts.get(callDate) ?? 0) + 1);
         }
         return [...counts.entries()]
@@ -227,72 +281,72 @@ export async function runCallDetailsReadQuery(
       }
 
       case "calls_by_agent": {
-        const callsRows = await selectWithDateFilter(CALLS_TABLE, "agent_name", dateFilter, customDateRange).catch((error) => {
-          if (isMissingColumnError(error)) return [];
-          throw error;
-        });
-        if (callsRows.length) {
-          return aggregateCountByKey(callsRows, "agent_name", "agent_name", "total_calls", 25);
-        }
-        return [];
-      }
-
-      case "top_dispositions": {
-        const callsRows = await selectWithDateFilter(CALLS_TABLE, "disposition", dateFilter, customDateRange).catch((error) => {
-          if (isMissingColumnError(error)) return [];
-          throw error;
-        });
-        if (callsRows.length) {
-          return aggregateCountByKey(callsRows, "disposition", "disposition", "total_count", 10);
-        }
-        const callDataRows = await selectWithDateFilter(CALL_DATA_TABLE, "sentiment", dateFilter, customDateRange);
-        return aggregateCountByKey(callDataRows, "sentiment", "disposition", "total_count", 10);
-      }
-
-      case "longest_calls": {
-        const callsRows = await selectWithDateFilter(
-          CALLS_TABLE,
-          "call_id,duration_seconds,created_at",
+        const callsRows = await selectCallsWithDateFilter(
+          "booking_practitioner,name",
           dateFilter,
           customDateRange,
         ).catch((error) => {
           if (isMissingColumnError(error)) return [];
           throw error;
         });
-        const callDataRows = await selectWithDateFilter(
-          CALL_DATA_TABLE,
-          "call_id,transcript,created_at",
+        const normalizedRows = callsRows.map((row) => ({ agent_name: getAgentLabel(row) }));
+        return aggregateCountByKey(normalizedRows, "agent_name", "agent_name", "total_calls", 25);
+      }
+
+      case "top_dispositions": {
+        const callsRows = await selectCallsWithDateFilter(
+          "call_type,status",
           dateFilter,
           customDateRange,
-        );
+        ).catch((error) => {
+          if (isMissingColumnError(error)) return [];
+          throw error;
+        });
+        if (callsRows.length) {
+          const normalizedRows = callsRows.map((row) => ({ disposition: getDispositionLabel(row) }));
+          return aggregateCountByKey(normalizedRows, "disposition", "disposition", "total_count", 10);
+        }
+        const callDataRows = await selectCallDataWithDateFilter("sentiment", dateFilter, customDateRange);
+        return aggregateCountByKey(callDataRows, "sentiment", "disposition", "total_count", 10);
+      }
+
+      case "longest_calls": {
+        const callsRows = await selectCallsWithDateFilter(
+          "id,duration_secs,call_date",
+          dateFilter,
+          customDateRange,
+        ).catch((error) => {
+          if (isMissingColumnError(error)) return [];
+          throw error;
+        });
+        const callDataRows = await selectCallDataWithDateFilter("call_id,transcript", dateFilter, customDateRange);
         const normalizedCallsRows = callsRows.map((row) => ({
-          call_id: row.call_id,
-          duration_seconds: Number(row.duration_seconds) || 0,
-          call_started_at: row.created_at,
+          call_id: row.id,
+          duration_seconds: getDurationSeconds(row),
+          call_started_at: row[CALL_DATE_COLUMN],
         }));
-        const normalizedCallDataRows = callDataRows
-          .map((row) => {
-            const transcript = String(row.transcript ?? "");
-            return {
-              call_id: row.call_id,
-              duration_seconds: transcript ? Math.round(transcript.split(/\s+/).length / 2.5) : 0,
-              call_started_at: row.created_at,
-            };
-          });
+        const normalizedCallDataRows = callDataRows.map((row) => {
+          const transcript = String(row.transcript ?? "");
+          return {
+            call_id: row.call_id,
+            duration_seconds: transcript ? Math.round(transcript.split(/\s+/).length / 2.5) : 0,
+            call_started_at: null,
+          };
+        });
         return [...normalizedCallsRows, ...normalizedCallDataRows]
           .sort((a, b) => Number(b.duration_seconds) - Number(a.duration_seconds))
           .slice(0, 20);
       }
 
       case "call_status_summary": {
-        const callsRows = await selectWithDateFilter(CALLS_TABLE, "status", dateFilter, customDateRange).catch((error) => {
+        const callsRows = await selectCallsWithDateFilter("status", dateFilter, customDateRange).catch((error) => {
           if (isMissingColumnError(error)) return [];
           throw error;
         });
         if (callsRows.length) {
           return aggregateCountByKey(callsRows, "status", "status", "total_count", 10);
         }
-        const callDataRows = await selectWithDateFilter(CALL_DATA_TABLE, "sentiment", dateFilter, customDateRange);
+        const callDataRows = await selectCallDataWithDateFilter("sentiment", dateFilter, customDateRange);
         return aggregateCountByKey(callDataRows, "sentiment", "status", "total_count", 10);
       }
 
