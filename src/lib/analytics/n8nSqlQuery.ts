@@ -1,7 +1,11 @@
 import dns from "node:dns";
 import { lookup } from "node:dns/promises";
 import { Pool, type PoolConfig, type QueryResultRow } from "pg";
-import { getAnalyticsSchema, getProjectDbUrl } from "@/lib/supabaseConfig";
+import {
+  getAnalyticsSchema,
+  getProjectDbUrl,
+  getSupabaseProjectRef,
+} from "@/lib/supabaseConfig";
 
 /** VPS hosts often lack IPv6 routes; Supabase DB DNS may prefer IPv6 and fail with ENETUNREACH. */
 dns.setDefaultResultOrder("ipv4first");
@@ -36,22 +40,40 @@ function isIpv4Host(host: string): boolean {
 
 async function buildPoolConfig(connectionString: string): Promise<PoolConfig> {
   const url = new URL(connectionString);
-  const host = url.hostname;
+  let host = url.hostname;
   const ssl = host.includes("localhost") ? undefined : { rejectUnauthorized: false };
-  const base: PoolConfig = { max: 5, ssl };
 
-  let resolvedConnectionString = connectionString;
   if (!isIpv4Host(host)) {
     try {
       const { address } = await lookup(host, { family: 4 });
-      url.hostname = address;
-      resolvedConnectionString = url.toString();
+      host = address;
     } catch {
-      resolvedConnectionString = connectionString;
+      host = url.hostname;
     }
   }
 
-  return { ...base, connectionString: resolvedConnectionString };
+  let user = decodeURIComponent(url.username);
+  const ref = getSupabaseProjectRef();
+  if (host.includes(".pooler.supabase.com") || url.hostname.includes(".pooler.supabase.com")) {
+    if (user === "postgres" && ref) {
+      user = `postgres.${ref}`;
+    } else if (ref && !user.includes(".") && user.startsWith("postgres")) {
+      user = `postgres.${ref}`;
+    }
+  }
+
+  const database = (url.pathname.replace(/^\//, "") || "postgres").toLowerCase();
+
+  // Use discrete fields — libpq can mis-parse usernames with dots in a connection URI.
+  return {
+    max: 5,
+    ssl,
+    host,
+    port: Number(url.port || 5432),
+    user,
+    password: decodeURIComponent(url.password),
+    database,
+  };
 }
 
 async function getPool(): Promise<Pool> {

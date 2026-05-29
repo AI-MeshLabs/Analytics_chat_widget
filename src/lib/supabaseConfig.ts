@@ -26,7 +26,7 @@ export function getSupabaseServiceKey(): string {
   return key;
 }
 
-function getSupabaseProjectRef(): string | null {
+export function getSupabaseProjectRef(): string | null {
   const supabaseUrl = process.env.SUPABASE_URL?.trim();
   if (!supabaseUrl) return null;
   const match = supabaseUrl.match(/https?:\/\/([a-z0-9-]+)\.supabase\.co/i);
@@ -62,12 +62,25 @@ export function normalizeProjectDbUrl(connectionString: string): string {
   return url.toString();
 }
 
+function stripEnvQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 /** Direct Postgres URL for n8n read-only SQL (not the Supabase REST API). */
 export function getProjectDbUrl(): string {
-  const explicit =
+  const explicit = stripEnvQuotes(
     process.env.PROJECTDB_URL?.trim() ||
-    process.env.DATABASE_URL?.trim() ||
-    process.env.SUPABASE_DATABASE_URL?.trim();
+      process.env.DATABASE_URL?.trim() ||
+      process.env.SUPABASE_DATABASE_URL?.trim() ||
+      "",
+  );
 
   if (explicit) return normalizeProjectDbUrl(explicit);
 
