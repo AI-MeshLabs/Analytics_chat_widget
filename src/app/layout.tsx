@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { WidgetConfigInit } from "@/components/widget/WidgetConfigInit";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,15 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <WidgetConfigInit
+          apiBase=""
+          useBackend={process.env.NEXT_PUBLIC_WIDGET_USE_BACKEND === "true"}
+          webhookUrl={process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL?.trim() ?? ""}
+          widgetSecret={process.env.NEXT_PUBLIC_WIDGET_SECRET?.trim() ?? ""}
+        />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,11 +1,37 @@
 (function () {
   if (window.__OnePointAnalyticsWidgetLoaded) return;
   window.__OnePointAnalyticsWidgetLoaded = true;
-  window.__OPAW_WIDGET_BUILD = "20260516-responsive";
+  window.__OPAW_WIDGET_BUILD = "20260529-backend";
 
-  var config = window.AnalyticsWidgetConfig || {};
-  var apiBase = (config.apiBase || window.location.origin || "").replace(/\/$/, "");
-  var token = config.token || "";
+  function getRequestConfig() {
+    var cfg = window.AnalyticsWidgetConfig || {};
+    var scriptEl = document.getElementById("onepoint-analytics-widget-script");
+    var useBackend = false;
+    if (cfg.useBackend === true) {
+      useBackend = true;
+    } else if (cfg.useBackend === false) {
+      useBackend = false;
+    } else if (scriptEl && scriptEl.getAttribute("data-use-backend") === "true") {
+      useBackend = true;
+    }
+    var apiBase = String(cfg.apiBase || window.location.origin || "").replace(/\/$/, "");
+
+    if (useBackend) {
+      return {
+        mode: "backend",
+        url: apiBase + "/api/analytics-chat/query",
+        secret: "",
+      };
+    }
+
+    var dataUrl = scriptEl ? scriptEl.getAttribute("data-webhook-url") : "";
+    var dataSecret = scriptEl ? scriptEl.getAttribute("data-widget-secret") : "";
+    return {
+      mode: "n8n",
+      url: String(cfg.webhookUrl || dataUrl || "").trim(),
+      secret: String(cfg.widgetSecret || dataSecret || "").trim(),
+    };
+  }
 
   var host = document.createElement("div");
   host.id = "onepoint-analytics-widget-root";
@@ -319,11 +345,9 @@
     sendBtn.textContent = loading ? "Sending..." : "Send";
   }
 
-  function getApiUrl() {
-    return apiBase + "/api/analytics-chat/query";
-  }
-
   var CHAT_FETCH_MS = 45000;
+  var FALLBACK_MESSAGE =
+    "Sorry, I could not fetch analytics right now. Please try again.";
 
   function chatTimeoutSignal(ms) {
     if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -342,27 +366,65 @@
     setLoading(true);
 
     try {
-      var headers = { "Content-Type": "application/json" };
-      if (token) headers.Authorization = "Bearer " + token;
+      var requestConfig = getRequestConfig();
+      if (!requestConfig.url) {
+        throw new Error(
+          requestConfig.mode === "backend" ? "Backend not configured" : "Webhook not configured",
+        );
+      }
 
-      var res = await fetch(getApiUrl(), {
+      var headers = { "Content-Type": "application/json" };
+      if (requestConfig.mode === "n8n" && requestConfig.secret) {
+        headers["x-widget-secret"] = requestConfig.secret;
+      }
+
+      var res = await fetch(requestConfig.url, {
         method: "POST",
         headers: headers,
         body: JSON.stringify({ question: question }),
         signal: chatTimeoutSignal(CHAT_FETCH_MS),
       });
 
-      if (!res.ok) throw new Error("Request failed");
-      var payload = await res.json();
+      var payload = null;
+      try {
+        payload = await res.json();
+      } catch (parseErr) {
+        if (!res.ok) throw new Error("Request failed");
+        throw parseErr;
+      }
+
+      if (!res.ok) {
+        var errDetail =
+          payload && typeof payload.error === "string"
+            ? payload.error
+            : payload && typeof payload.message === "string"
+              ? payload.message
+              : "";
+        throw new Error(errDetail || "Request failed");
+      }
+
+      var answer =
+        payload && typeof payload.answer === "string" && payload.answer.trim()
+          ? payload.answer.trim()
+          : "";
+      if (!answer) {
+        throw new Error("Empty answer");
+      }
+
       messages.push({
         role: "bot",
-        text: (payload && payload.answer) || "No response available.",
+        text: answer,
+        data: payload && payload.data !== undefined ? payload.data : null,
       });
     } catch (err) {
-      var msg =
-        err && err.name === "AbortError"
-          ? "That request took too long (server or database may be slow). Try a shorter range or try again."
-          : "Sorry, I could not fetch analytics right now. Please try again.";
+      var msg = FALLBACK_MESSAGE;
+      if (err && err.name === "AbortError") {
+        msg =
+          "That request took too long (server or database may be slow). Try a shorter range or try again.";
+      } else if (err && err.message === "Webhook not configured") {
+        msg =
+          "Analytics is not configured yet (missing webhook URL). Please contact your administrator.";
+      }
       messages.push({
         role: "bot",
         text: msg,

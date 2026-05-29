@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { executeN8nReadOnlySql } from "@/lib/analytics/n8nSqlQuery";
 import { getAnalyticsIntent, type AnalyticsIntent } from "@/lib/analytics/intents";
 import { runCallDetailsReadQuery, type CustomDateRange, type DateFilterKey } from "@/lib/db";
 
@@ -471,22 +472,32 @@ export async function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
+function isN8nSqlBody(body: Record<string, unknown>): boolean {
+  return typeof body.sql === "string";
+}
+
 export async function POST(request: Request) {
-  let body: QueryRequestBody;
+  let body: Record<string, unknown>;
 
   try {
-    body = (await request.json()) as QueryRequestBody;
+    body = (await request.json()) as Record<string, unknown>;
   } catch {
     return NextResponse.json(
-      { error: "Invalid JSON body. Provide { \"question\": \"string\" }." },
+      { error: "Invalid JSON body." },
       { status: 400, headers: corsHeaders(request) },
     );
   }
 
-  const question = body.question?.trim();
+  if (isN8nSqlBody(body)) {
+    const result = await executeN8nReadOnlySql(body.sql);
+    const status = result.success ? 200 : 400;
+    return NextResponse.json(result, { status, headers: corsHeaders(request) });
+  }
+
+  const question = typeof body.question === "string" ? body.question.trim() : "";
   if (!question) {
     return NextResponse.json(
-      { error: "The 'question' field is required." },
+      { error: 'Provide { "sql": "SELECT ..." } for n8n or { "question": "string" } for the chat widget.' },
       { status: 400, headers: corsHeaders(request) },
     );
   }

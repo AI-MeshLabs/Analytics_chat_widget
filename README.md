@@ -19,7 +19,7 @@ App routes:
 Required/expected values:
 
 - `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_KEY` - Supabase service role key used server-side for read queries
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key used server-side for read queries
 - `NODE_ENV` - `development` or `production`
 
 Current `.env.example` also includes:
@@ -55,7 +55,7 @@ docker build -t analytics-chat-widget .
 docker run --rm -p 4003:4003 \
   -e NODE_ENV=production \
   -e SUPABASE_URL="https://your-project-id.supabase.co" \
-  -e SUPABASE_KEY="your-service-role-key" \
+  -e SUPABASE_SERVICE_ROLE_KEY="your-service-role-key" \
   analytics-chat-widget
 ```
 
@@ -82,4 +82,4 @@ npm run build
 NODE_ENV=production npm run start -- -p 3002
 ```
 
-Put `.env` with `SUPABASE_URL` and `SUPABASE_KEY` next to the app (or export them in the shell). Use [`upgrade` headers](https://nginx.org/en/docs/http/websocket.html) in Nginx only if you intentionally run **development** mode behind a proxy.
+Put `.env` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` next to the app (or export them in the shell). Use [`upgrade` headers](https://nginx.org/en/docs/http/websocket.html) in Nginx only if you intentionally run **development** mode behind a proxy.

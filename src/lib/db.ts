@@ -1,12 +1,12 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AnalyticsIntent } from "@/lib/analytics/intents";
+import { getAnalyticsSchema, getSupabaseServiceKey, getSupabaseUrl } from "@/lib/supabaseConfig";
 
 export type DateFilterKey = "today" | "yesterday" | "this_week" | "this_month" | "last_week" | "last_month";
 export type CustomDateRange = {
   start: Date;
   end: Date;
 };
-const ANALYTICS_SCHEMA = "onepoint";
 const CALL_DATA_TABLE = "call_data";
 const CALLS_TABLE = "calls";
 const CALL_DATE_COLUMN = "call_date";
@@ -14,11 +14,8 @@ const CALL_DATE_COLUMN = "call_date";
 let supabaseSingleton: SupabaseClient | null = null;
 
 function getSupabase(): SupabaseClient {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_KEY;
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error("SUPABASE_URL and SUPABASE_KEY must be configured.");
-  }
+  const supabaseUrl = getSupabaseUrl();
+  const supabaseKey = getSupabaseServiceKey();
   if (!supabaseSingleton) {
     supabaseSingleton = createClient(supabaseUrl, supabaseKey, {
       auth: {
@@ -91,7 +88,7 @@ function getDateRange(dateFilter: DateFilterKey): { start: Date; end: Date } {
   return { start, end };
 }
 
-/** Filter on onepoint.calls.call_date (when the call happened). */
+/** Filter on calls.call_date (when the call happened). */
 function applyCallDateFilter<T extends DateFilterQueryable>(
   query: T,
   dateFilter: DateFilterKey,
@@ -160,7 +157,7 @@ async function selectCallsWithDateFilter(
   customDateRange?: CustomDateRange,
   options?: { limit?: number },
 ): Promise<Array<Record<string, unknown>>> {
-  let query = getSupabase().schema(ANALYTICS_SCHEMA).from(CALLS_TABLE).select(selectColumns);
+  let query = getSupabase().schema(getAnalyticsSchema()).from(CALLS_TABLE).select(selectColumns);
   query = applyCallDateFilter(query, dateFilter, customDateRange);
   if (options?.limit != null) {
     query = query.limit(options.limit);
@@ -188,7 +185,7 @@ async function selectCallDataWithDateFilter(
   if (!callIds.length) return [];
 
   let query = getSupabase()
-    .schema(ANALYTICS_SCHEMA)
+    .schema(getAnalyticsSchema())
     .from(CALL_DATA_TABLE)
     .select(selectColumns)
     .in("call_id", callIds);
@@ -211,7 +208,7 @@ async function countCallsWithDateFilter(
   },
 ): Promise<number> {
   let query = getSupabase()
-    .schema(ANALYTICS_SCHEMA)
+    .schema(getAnalyticsSchema())
     .from(CALLS_TABLE)
     .select("*", { count: "exact", head: true });
   query = applyCallDateFilter(query, dateFilter, customDateRange);

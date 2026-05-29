@@ -1,16 +1,33 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAnalyticsSchema, getSupabaseServiceKey, getSupabaseUrl } from "@/lib/supabaseConfig";
 
 export async function GET() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
+  let schema: string;
+  try {
+    schema = getAnalyticsSchema();
+  } catch (error) {
     return NextResponse.json(
       {
         ok: false,
         stage: "env",
-        error: "Missing SUPABASE_URL or SUPABASE_KEY",
+        error: error instanceof Error ? error.message : "Invalid Supabase configuration",
+      },
+      { status: 500 },
+    );
+  }
+
+  let supabaseUrl: string;
+  let supabaseKey: string;
+  try {
+    supabaseUrl = getSupabaseUrl();
+    supabaseKey = getSupabaseServiceKey();
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        stage: "env",
+        error: error instanceof Error ? error.message : "Missing Supabase credentials",
       },
       { status: 500 },
     );
@@ -21,15 +38,16 @@ export async function GET() {
   });
 
   try {
-    const countProbe = await supabase.schema("onepoint").from("call_data").select("*", { count: "exact", head: true });
-    const sampleProbe = await supabase.schema("onepoint").from("call_data").select("*").limit(1);
-    const callsCountProbe = await supabase.schema("onepoint").from("calls").select("*", { count: "exact", head: true });
+    const countProbe = await supabase.schema(schema).from("call_data").select("*", { count: "exact", head: true });
+    const sampleProbe = await supabase.schema(schema).from("call_data").select("*").limit(1);
+    const callsCountProbe = await supabase.schema(schema).from("calls").select("*", { count: "exact", head: true });
 
     const ok =
       !countProbe.error && !sampleProbe.error && !callsCountProbe.error;
 
     return NextResponse.json({
       ok,
+      schema,
       stage: "query",
       countProbe: {
         count: countProbe.count ?? null,

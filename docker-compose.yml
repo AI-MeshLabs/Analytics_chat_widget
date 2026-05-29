@@ -9,5 +9,6 @@ services:
     environment:
       NODE_ENV: production
       SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_KEY: ${SUPABASE_KEY}
+      SUPABASE_DB_SCHEMA: ${SUPABASE_DB_SCHEMA:-onepoint}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     restart: unless-stopped
