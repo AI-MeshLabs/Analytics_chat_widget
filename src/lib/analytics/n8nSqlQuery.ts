@@ -1,5 +1,5 @@
 import { Pool, type QueryResultRow } from "pg";
-import { getAnalyticsSchema } from "@/lib/supabaseConfig";
+import { getAnalyticsSchema, getProjectDbUrl } from "@/lib/supabaseConfig";
 
 const BLOCKED_KEYWORD_PATTERN =
   /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|execute|copy|merge|into)\b/i;
@@ -25,10 +25,7 @@ export type N8nSqlFailure = {
 export type N8nSqlResult = N8nSqlSuccess | N8nSqlFailure;
 
 function getPool(): Pool {
-  const connectionString = process.env.PROJECTDB_URL?.trim();
-  if (!connectionString) {
-    throw new Error("PROJECTDB_URL must be configured for n8n SQL analytics queries.");
-  }
+  const connectionString = getProjectDbUrl();
   if (!poolSingleton) {
     poolSingleton = new Pool({
       connectionString,

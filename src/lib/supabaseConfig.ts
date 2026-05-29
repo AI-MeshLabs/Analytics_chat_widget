@@ -25,3 +25,37 @@ export function getSupabaseServiceKey(): string {
   }
   return key;
 }
+
+function getSupabaseProjectRef(): string | null {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  if (!supabaseUrl) return null;
+  const match = supabaseUrl.match(/https?:\/\/([a-z0-9-]+)\.supabase\.co/i);
+  return match?.[1] ?? null;
+}
+
+function buildProjectDbUrlFromSupabaseEnv(): string | null {
+  const password =
+    process.env.SUPABASE_DB_PASSWORD?.trim() ||
+    process.env.PROJECTDB_PASSWORD?.trim() ||
+    process.env.POSTGRES_PASSWORD?.trim();
+  const ref = getSupabaseProjectRef();
+  if (!password || !ref) return null;
+  return `postgresql://postgres:${encodeURIComponent(password)}@db.${ref}.supabase.co:5432/postgres`;
+}
+
+/** Direct Postgres URL for n8n read-only SQL (not the Supabase REST API). */
+export function getProjectDbUrl(): string {
+  const explicit =
+    process.env.PROJECTDB_URL?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    process.env.SUPABASE_DATABASE_URL?.trim();
+  if (explicit) return explicit;
+
+  const derived = buildProjectDbUrlFromSupabaseEnv();
+  if (derived) return derived;
+
+  throw new Error(
+    "Database URL missing. Set PROJECTDB_URL in .env (postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres), " +
+      "or set SUPABASE_URL plus SUPABASE_DB_PASSWORD.",
+  );
+}
