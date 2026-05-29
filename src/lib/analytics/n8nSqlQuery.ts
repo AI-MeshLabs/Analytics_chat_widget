@@ -1,5 +1,10 @@
-import { Pool, type QueryResultRow } from "pg";
+import dns from "node:dns";
+import { lookup } from "node:dns/promises";
+import { Pool, type PoolConfig, type QueryResultRow } from "pg";
 import { getAnalyticsSchema, getProjectDbUrl } from "@/lib/supabaseConfig";
+
+/** VPS hosts often lack IPv6 routes; Supabase DB DNS may prefer IPv6 and fail with ENETUNREACH. */
+dns.setDefaultResultOrder("ipv4first");
 
 const BLOCKED_KEYWORD_PATTERN =
   /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|execute|copy|merge|into)\b/i;
@@ -10,6 +15,7 @@ const AGGREGATE_OR_LIMIT_PATTERN =
 const DEFAULT_ROW_LIMIT = 100;
 
 let poolSingleton: Pool | null = null;
+let poolInitPromise: Promise<Pool> | null = null;
 
 export type N8nSqlSuccess = {
   success: true;
@@ -24,16 +30,46 @@ export type N8nSqlFailure = {
 
 export type N8nSqlResult = N8nSqlSuccess | N8nSqlFailure;
 
-function getPool(): Pool {
-  const connectionString = getProjectDbUrl();
-  if (!poolSingleton) {
-    poolSingleton = new Pool({
-      connectionString,
-      max: 5,
-      ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
-    });
+function isIpv4Host(host: string): boolean {
+  return host === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+}
+
+async function buildPoolConfig(connectionString: string): Promise<PoolConfig> {
+  const url = new URL(connectionString);
+  const host = url.hostname;
+  const ssl = host.includes("localhost") ? undefined : { rejectUnauthorized: false };
+  const base: PoolConfig = { max: 5, ssl };
+
+  if (isIpv4Host(host)) {
+    return { ...base, connectionString };
   }
-  return poolSingleton;
+
+  try {
+    const { address } = await lookup(host, { family: 4 });
+    return {
+      ...base,
+      host: address,
+      port: Number(url.port || 5432),
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname.replace(/^\//, "") || "postgres",
+    };
+  } catch {
+    return { ...base, connectionString };
+  }
+}
+
+async function getPool(): Promise<Pool> {
+  if (poolSingleton) return poolSingleton;
+  if (!poolInitPromise) {
+    poolInitPromise = (async () => {
+      const connectionString = getProjectDbUrl();
+      const pool = new Pool(await buildPoolConfig(connectionString));
+      poolSingleton = pool;
+      return pool;
+    })();
+  }
+  return poolInitPromise;
 }
 
 function normalizeSqlInput(sql: unknown): string {
@@ -99,7 +135,7 @@ export async function executeN8nReadOnlySql(sqlInput: unknown): Promise<N8nSqlRe
   try {
     const normalized = normalizeSqlInput(sqlInput);
     const preparedSql = validateAndPrepareReadOnlySql(normalized);
-    const pool = getPool();
+    const pool = await getPool();
 
     const client = await pool.connect();
     try {
