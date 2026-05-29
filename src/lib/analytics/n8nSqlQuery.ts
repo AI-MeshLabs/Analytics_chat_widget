@@ -40,23 +40,18 @@ async function buildPoolConfig(connectionString: string): Promise<PoolConfig> {
   const ssl = host.includes("localhost") ? undefined : { rejectUnauthorized: false };
   const base: PoolConfig = { max: 5, ssl };
 
-  if (isIpv4Host(host)) {
-    return { ...base, connectionString };
+  let resolvedConnectionString = connectionString;
+  if (!isIpv4Host(host)) {
+    try {
+      const { address } = await lookup(host, { family: 4 });
+      url.hostname = address;
+      resolvedConnectionString = url.toString();
+    } catch {
+      resolvedConnectionString = connectionString;
+    }
   }
 
-  try {
-    const { address } = await lookup(host, { family: 4 });
-    return {
-      ...base,
-      host: address,
-      port: Number(url.port || 5432),
-      user: decodeURIComponent(url.username),
-      password: decodeURIComponent(url.password),
-      database: url.pathname.replace(/^\//, "") || "postgres",
-    };
-  } catch {
-    return { ...base, connectionString };
-  }
+  return { ...base, connectionString: resolvedConnectionString };
 }
 
 async function getPool(): Promise<Pool> {
@@ -161,6 +156,13 @@ export async function executeN8nReadOnlySql(sqlInput: unknown): Promise<N8nSqlRe
       return { success: false, error: error.message };
     }
     const message = error instanceof Error ? error.message : "Query execution failed.";
+    if (/password authentication failed/i.test(message) && /user "postgres"/i.test(message)) {
+      return {
+        success: false,
+        error:
+          `${message} — Supabase pooler requires username postgres.[project-ref] (e.g. postgres.xweuzpdzcrjrkzcsruxc), not "postgres". Copy the full URI from Supabase → Database → Connection pooling.`,
+      };
+    }
     return { success: false, error: message };
   }
 }

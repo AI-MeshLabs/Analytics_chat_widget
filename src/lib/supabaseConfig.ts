@@ -40,7 +40,26 @@ function buildProjectDbUrlFromSupabaseEnv(): string | null {
     process.env.POSTGRES_PASSWORD?.trim();
   const ref = getSupabaseProjectRef();
   if (!password || !ref) return null;
+
+  const poolerHost = process.env.SUPABASE_POOLER_HOST?.trim();
+  if (poolerHost) {
+    const port = process.env.SUPABASE_POOLER_PORT?.trim() || "6543";
+    return `postgresql://postgres.${ref}:${encodeURIComponent(password)}@${poolerHost}:${port}/postgres`;
+  }
+
   return `postgresql://postgres:${encodeURIComponent(password)}@db.${ref}.supabase.co:5432/postgres`;
+}
+
+/** Supabase pooler requires username postgres.[project-ref], not plain postgres. */
+export function normalizeProjectDbUrl(connectionString: string): string {
+  const url = new URL(connectionString);
+  const ref = getSupabaseProjectRef();
+
+  if (url.hostname.includes(".pooler.supabase.com") && url.username === "postgres" && ref) {
+    url.username = `postgres.${ref}`;
+  }
+
+  return url.toString();
 }
 
 /** Direct Postgres URL for n8n read-only SQL (not the Supabase REST API). */
@@ -49,13 +68,14 @@ export function getProjectDbUrl(): string {
     process.env.PROJECTDB_URL?.trim() ||
     process.env.DATABASE_URL?.trim() ||
     process.env.SUPABASE_DATABASE_URL?.trim();
-  if (explicit) return explicit;
+
+  if (explicit) return normalizeProjectDbUrl(explicit);
 
   const derived = buildProjectDbUrlFromSupabaseEnv();
-  if (derived) return derived;
+  if (derived) return normalizeProjectDbUrl(derived);
 
   throw new Error(
-    "Database URL missing. Set PROJECTDB_URL in .env (postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres), " +
+    "Database URL missing. Set PROJECTDB_URL in .env (Supabase pooler: postgresql://postgres.PROJECT_REF:PASSWORD@....pooler.supabase.com:6543/postgres), " +
       "or set SUPABASE_URL plus SUPABASE_DB_PASSWORD.",
   );
 }
