@@ -185,6 +185,13 @@ export async function executeN8nReadOnlySql(sqlInput: unknown): Promise<N8nSqlRe
           `${message} — Supabase pooler requires username postgres.[project-ref] (e.g. postgres.xweuzpdzcrjrkzcsruxc), not "postgres". Copy the full URI from Supabase → Database → Connection pooling.`,
       };
     }
+    if (/tenant\/user|tenant or user not found/i.test(message)) {
+      return {
+        success: false,
+        error:
+          `${message} — The pooler host/port does not match this project. In Supabase → Settings → Database → Connection pooling, copy the full URI exactly (host aws-0 vs aws-1, port 6543 for transaction / 5432 for session). Or set PROJECTDB_USE_DIRECT=true and use direct db.[ref].supabase.co:5432 with user postgres.`,
+      };
+    }
     return { success: false, error: message };
   }
 }

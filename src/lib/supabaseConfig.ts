@@ -33,13 +33,29 @@ export function getSupabaseProjectRef(): string | null {
   return match?.[1] ?? null;
 }
 
-function buildProjectDbUrlFromSupabaseEnv(): string | null {
+function getDbPasswordFromEnv(): string | null {
   const password =
     process.env.SUPABASE_DB_PASSWORD?.trim() ||
     process.env.PROJECTDB_PASSWORD?.trim() ||
     process.env.POSTGRES_PASSWORD?.trim();
+  return password || null;
+}
+
+function buildDirectDbUrl(): string | null {
+  const password = getDbPasswordFromEnv();
   const ref = getSupabaseProjectRef();
   if (!password || !ref) return null;
+  return `postgresql://postgres:${encodeURIComponent(password)}@db.${ref}.supabase.co:5432/postgres`;
+}
+
+function buildProjectDbUrlFromSupabaseEnv(): string | null {
+  const password = getDbPasswordFromEnv();
+  const ref = getSupabaseProjectRef();
+  if (!password || !ref) return null;
+
+  if (process.env.PROJECTDB_USE_DIRECT === "true") {
+    return buildDirectDbUrl();
+  }
 
   const poolerHost = process.env.SUPABASE_POOLER_HOST?.trim();
   if (poolerHost) {
@@ -47,7 +63,7 @@ function buildProjectDbUrlFromSupabaseEnv(): string | null {
     return `postgresql://postgres.${ref}:${encodeURIComponent(password)}@${poolerHost}:${port}/postgres`;
   }
 
-  return `postgresql://postgres:${encodeURIComponent(password)}@db.${ref}.supabase.co:5432/postgres`;
+  return buildDirectDbUrl();
 }
 
 /** Supabase pooler requires username postgres.[project-ref], not plain postgres. */
@@ -81,6 +97,14 @@ export function getProjectDbUrl(): string {
       process.env.SUPABASE_DATABASE_URL?.trim() ||
       "",
   );
+
+  if (process.env.PROJECTDB_USE_DIRECT === "true") {
+    const directFromEnv = buildDirectDbUrl();
+    if (directFromEnv) return directFromEnv;
+    if (explicit && /@db\.[a-z0-9-]+\.supabase\.co/i.test(explicit)) {
+      return normalizeProjectDbUrl(explicit);
+    }
+  }
 
   if (explicit) return normalizeProjectDbUrl(explicit);
 
