@@ -6,10 +6,9 @@ type Props = {
   apiBase: string;
   useBackend: boolean;
   webhookUrl: string;
-  widgetSecret: string;
 };
 
-export function WidgetConfigInit({ apiBase, useBackend, webhookUrl, widgetSecret }: Props) {
+export function WidgetConfigInit({ apiBase, useBackend, webhookUrl }: Props) {
   useEffect(() => {
     window.AnalyticsWidgetConfig = {
       ...window.AnalyticsWidgetConfig,
@@ -19,9 +18,8 @@ export function WidgetConfigInit({ apiBase, useBackend, webhookUrl, widgetSecret
         window.location.origin,
       useBackend,
       webhookUrl: webhookUrl || window.AnalyticsWidgetConfig?.webhookUrl || "",
-      widgetSecret: widgetSecret || window.AnalyticsWidgetConfig?.widgetSecret || "",
     };
-  }, [apiBase, useBackend, webhookUrl, widgetSecret]);
+  }, [apiBase, useBackend, webhookUrl]);
 
   return null;
 }

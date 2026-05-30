@@ -38,16 +38,15 @@ export async function GET() {
   });
 
   try {
-    const countProbe = await supabase.schema(schema).from("call_data").select("*", { count: "exact", head: true });
-    const sampleProbe = await supabase.schema(schema).from("call_data").select("*").limit(1);
-    const callsCountProbe = await supabase.schema(schema).from("calls").select("*", { count: "exact", head: true });
+    const countProbe = await supabase.schema(schema).from("calls").select("*", { count: "exact", head: true });
+    const sampleProbe = await supabase.schema(schema).from("calls").select("*").limit(1);
 
-    const ok =
-      !countProbe.error && !sampleProbe.error && !callsCountProbe.error;
+    const ok = !countProbe.error && !sampleProbe.error;
 
     return NextResponse.json({
       ok,
       schema,
+      table: "calls",
       stage: "query",
       countProbe: {
         count: countProbe.count ?? null,
@@ -57,17 +56,6 @@ export async function GET() {
               message: countProbe.error.message ?? "",
               details: countProbe.error.details ?? null,
               hint: countProbe.error.hint ?? null,
-            }
-          : null,
-      },
-      callsCountProbe: {
-        count: callsCountProbe.count ?? null,
-        error: callsCountProbe.error
-          ? {
-              code: callsCountProbe.error.code ?? null,
-              message: callsCountProbe.error.message ?? "",
-              details: callsCountProbe.error.details ?? null,
-              hint: callsCountProbe.error.hint ?? null,
             }
           : null,
       },

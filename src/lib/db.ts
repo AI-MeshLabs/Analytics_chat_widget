@@ -7,7 +7,6 @@ export type CustomDateRange = {
   start: Date;
   end: Date;
 };
-const CALL_DATA_TABLE = "call_data";
 const CALLS_TABLE = "calls";
 const CALL_DATE_COLUMN = "call_date";
 
@@ -25,6 +24,11 @@ function getSupabase(): SupabaseClient {
     });
   }
   return supabaseSingleton;
+}
+
+/** Shared Supabase client (same connection as dashboard analytics queries). */
+export function getSupabaseClient(): SupabaseClient {
+  return getSupabase();
 }
 
 type DateFilterQueryable = {
@@ -167,36 +171,6 @@ async function selectCallsWithDateFilter(
   return (data ?? []) as unknown as Array<Record<string, unknown>>;
 }
 
-async function getCallIdsInDateRange(
-  dateFilter: DateFilterKey,
-  customDateRange?: CustomDateRange,
-): Promise<string[]> {
-  const rows = await selectCallsWithDateFilter("id", dateFilter, customDateRange);
-  return rows.map((row) => String(row.id ?? "")).filter(Boolean);
-}
-
-async function selectCallDataWithDateFilter(
-  selectColumns: string,
-  dateFilter: DateFilterKey,
-  customDateRange?: CustomDateRange,
-  options?: { limit?: number },
-): Promise<Array<Record<string, unknown>>> {
-  const callIds = await getCallIdsInDateRange(dateFilter, customDateRange);
-  if (!callIds.length) return [];
-
-  let query = getSupabase()
-    .schema(getAnalyticsSchema())
-    .from(CALL_DATA_TABLE)
-    .select(selectColumns)
-    .in("call_id", callIds);
-  if (options?.limit != null) {
-    query = query.limit(options.limit);
-  }
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data ?? []) as unknown as Array<Record<string, unknown>>;
-}
-
 async function countCallsWithDateFilter(
   dateFilter: DateFilterKey,
   customDateRange?: CustomDateRange,
@@ -235,24 +209,12 @@ export async function runCallDetailsReadQuery(
       }
 
       case "average_duration": {
-        const durationSampleLimit = 8000;
-        const [callsRows, callDataRows] = await Promise.all([
-          selectCallsWithDateFilter("duration_secs", dateFilter, customDateRange, {
-            limit: durationSampleLimit,
-          }),
-          selectCallDataWithDateFilter("transcript", dateFilter, customDateRange, {
-            limit: durationSampleLimit,
-          }),
-        ]);
-
-        const explicitDurations = callsRows.map(getDurationSeconds).filter((value) => value > 0);
-        const transcriptEstimates = callDataRows
-          .map((row) => String(row.transcript ?? "").trim())
-          .map((transcript) => (transcript ? Math.round(transcript.split(/\s+/).length / 2.5) : 0));
-
-        const allDurations = [...explicitDurations, ...transcriptEstimates];
-        const total = allDurations.reduce((sum, value) => sum + value, 0);
-        const average = allDurations.length ? Math.round(total / allDurations.length) : 0;
+        const callsRows = await selectCallsWithDateFilter("duration_secs", dateFilter, customDateRange, {
+          limit: 8000,
+        });
+        const durations = callsRows.map(getDurationSeconds).filter((value) => value > 0);
+        const total = durations.reduce((sum, value) => sum + value, 0);
+        const average = durations.length ? Math.round(total / durations.length) : 0;
         return [{ average_duration_seconds: average }];
       }
 
@@ -299,12 +261,8 @@ export async function runCallDetailsReadQuery(
           if (isMissingColumnError(error)) return [];
           throw error;
         });
-        if (callsRows.length) {
-          const normalizedRows = callsRows.map((row) => ({ disposition: getDispositionLabel(row) }));
-          return aggregateCountByKey(normalizedRows, "disposition", "disposition", "total_count", 10);
-        }
-        const callDataRows = await selectCallDataWithDateFilter("sentiment", dateFilter, customDateRange);
-        return aggregateCountByKey(callDataRows, "sentiment", "disposition", "total_count", 10);
+        const normalizedRows = callsRows.map((row) => ({ disposition: getDispositionLabel(row) }));
+        return aggregateCountByKey(normalizedRows, "disposition", "disposition", "total_count", 10);
       }
 
       case "longest_calls": {
@@ -316,21 +274,12 @@ export async function runCallDetailsReadQuery(
           if (isMissingColumnError(error)) return [];
           throw error;
         });
-        const callDataRows = await selectCallDataWithDateFilter("call_id,transcript", dateFilter, customDateRange);
-        const normalizedCallsRows = callsRows.map((row) => ({
-          call_id: row.id,
-          duration_seconds: getDurationSeconds(row),
-          call_started_at: row[CALL_DATE_COLUMN],
-        }));
-        const normalizedCallDataRows = callDataRows.map((row) => {
-          const transcript = String(row.transcript ?? "");
-          return {
-            call_id: row.call_id,
-            duration_seconds: transcript ? Math.round(transcript.split(/\s+/).length / 2.5) : 0,
-            call_started_at: null,
-          };
-        });
-        return [...normalizedCallsRows, ...normalizedCallDataRows]
+        return callsRows
+          .map((row) => ({
+            call_id: row.id,
+            duration_seconds: getDurationSeconds(row),
+            call_started_at: row[CALL_DATE_COLUMN],
+          }))
           .sort((a, b) => Number(b.duration_seconds) - Number(a.duration_seconds))
           .slice(0, 20);
       }
@@ -340,11 +289,7 @@ export async function runCallDetailsReadQuery(
           if (isMissingColumnError(error)) return [];
           throw error;
         });
-        if (callsRows.length) {
-          return aggregateCountByKey(callsRows, "status", "status", "total_count", 10);
-        }
-        const callDataRows = await selectCallDataWithDateFilter("sentiment", dateFilter, customDateRange);
-        return aggregateCountByKey(callDataRows, "sentiment", "status", "total_count", 10);
+        return aggregateCountByKey(callsRows, "status", "status", "total_count", 10);
       }
 
       case "unknown":

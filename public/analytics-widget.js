@@ -1,7 +1,7 @@
 (function () {
   if (window.__OnePointAnalyticsWidgetLoaded) return;
   window.__OnePointAnalyticsWidgetLoaded = true;
-  window.__OPAW_WIDGET_BUILD = "20260529-backend";
+  window.__OPAW_WIDGET_BUILD = "20260530-n8n";
 
   function getRequestConfig() {
     var cfg = window.AnalyticsWidgetConfig || {};
@@ -20,16 +20,13 @@
       return {
         mode: "backend",
         url: apiBase + "/api/analytics-chat/query",
-        secret: "",
       };
     }
 
     var dataUrl = scriptEl ? scriptEl.getAttribute("data-webhook-url") : "";
-    var dataSecret = scriptEl ? scriptEl.getAttribute("data-widget-secret") : "";
     return {
       mode: "n8n",
       url: String(cfg.webhookUrl || dataUrl || "").trim(),
-      secret: String(cfg.widgetSecret || dataSecret || "").trim(),
     };
   }
 
@@ -374,9 +371,6 @@
       }
 
       var headers = { "Content-Type": "application/json" };
-      if (requestConfig.mode === "n8n" && requestConfig.secret) {
-        headers["x-widget-secret"] = requestConfig.secret;
-      }
 
       var res = await fetch(requestConfig.url, {
         method: "POST",
@@ -424,6 +418,9 @@
       } else if (err && err.message === "Webhook not configured") {
         msg =
           "Analytics is not configured yet (missing webhook URL). Please contact your administrator.";
+      } else if (err && err.message === "Backend not configured") {
+        msg =
+          "Analytics is not configured yet (missing apiBase). Please contact your administrator.";
       }
       messages.push({
         role: "bot",

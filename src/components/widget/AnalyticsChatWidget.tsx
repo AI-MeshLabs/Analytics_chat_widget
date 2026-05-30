@@ -8,7 +8,6 @@ declare global {
       apiBase?: string;
       useBackend?: boolean;
       webhookUrl?: string;
-      widgetSecret?: string;
     };
     __OnePointAnalyticsWidgetLoaded?: boolean;
   }
@@ -17,11 +16,10 @@ declare global {
 const WIDGET_SCRIPT_ID = "onepoint-analytics-widget-script";
 const WIDGET_ROOT_ID = "onepoint-analytics-widget-root";
 /** Bump when public/analytics-widget.js changes so browsers fetch the latest asset. */
-const WIDGET_SCRIPT_VERSION = "20260529-backend";
+const WIDGET_SCRIPT_VERSION = "20260530-n8n";
 const WIDGET_DEV_RELOAD = process.env.NODE_ENV === "development";
 const USE_BACKEND = process.env.NEXT_PUBLIC_WIDGET_USE_BACKEND === "true";
 const PUBLIC_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL ?? "";
-const PUBLIC_WIDGET_SECRET = process.env.NEXT_PUBLIC_WIDGET_SECRET ?? "";
 
 function applyWidgetConfig() {
   if (typeof window === "undefined") return;
@@ -30,7 +28,6 @@ function applyWidgetConfig() {
     apiBase: window.AnalyticsWidgetConfig?.apiBase || window.location.origin,
     useBackend: USE_BACKEND,
     webhookUrl: PUBLIC_WEBHOOK_URL || window.AnalyticsWidgetConfig?.webhookUrl || "",
-    widgetSecret: PUBLIC_WIDGET_SECRET || window.AnalyticsWidgetConfig?.widgetSecret || "",
   };
 }
 
@@ -67,7 +64,6 @@ export function AnalyticsChatWidget() {
       script.removeAttribute("data-use-backend");
     }
     if (PUBLIC_WEBHOOK_URL) script.setAttribute("data-webhook-url", PUBLIC_WEBHOOK_URL);
-    if (PUBLIC_WIDGET_SECRET) script.setAttribute("data-widget-secret", PUBLIC_WIDGET_SECRET);
     script.src = WIDGET_DEV_RELOAD
       ? `/analytics-widget.js?t=${Date.now()}`
       : `/analytics-widget.js?v=${encodeURIComponent(WIDGET_SCRIPT_VERSION)}`;
