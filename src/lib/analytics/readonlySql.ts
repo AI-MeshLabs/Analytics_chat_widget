@@ -1,8 +1,11 @@
 import { getSupabaseClient } from "@/lib/db";
 import { getAnalyticsSchema } from "@/lib/supabaseConfig";
 import {
+  INBOUND_TABLE,
+  OUTBOUND_TABLE,
   ReadonlySqlValidationError,
   sanitizeReadonlySqlRows,
+  validateAllowedAnalyticsTables,
   validateAllowedCallColumns,
 } from "@/lib/analytics/sqlColumnPolicy";
 
@@ -48,8 +51,17 @@ function normalizeSqlInput(sql: unknown): string {
 
 export { ReadonlySqlValidationError } from "@/lib/analytics/sqlColumnPolicy";
 
+/** Fix common LLM mistake: `FROM table AND cond` → `FROM table WHERE cond`. */
+export function repairMissingWhereBeforeAnd(sql: string): string {
+  return sql.replace(
+    /\bFROM\s+(onepoint\.(?:calls|outbound_call_attempts)|calls|outbound_call_attempts)\s+AND\b/gi,
+    (_match, table: string) => `FROM ${table} WHERE`,
+  );
+}
+
 export function validateAndPrepareReadOnlySql(rawSql: string): string {
   let sql = rawSql.replace(/\s+/g, " ").trim();
+  sql = repairMissingWhereBeforeAnd(sql);
 
   if (sql.endsWith(";")) {
     sql = sql.slice(0, -1).trim();
@@ -71,23 +83,11 @@ export function validateAndPrepareReadOnlySql(rawSql: string): string {
   const schema = getAnalyticsSchema().toLowerCase();
   if (lowered.includes("call_data")) {
     throw new ReadonlySqlValidationError(
-      `Query must read only from ${getAnalyticsSchema()}.calls (call_data is not allowed).`,
+      `Query must read only from ${getAnalyticsSchema()}.${INBOUND_TABLE} or ${getAnalyticsSchema()}.${OUTBOUND_TABLE} (call_data is not allowed).`,
     );
   }
 
-  const referencesCalls =
-    lowered.includes(`${schema}.calls`) ||
-    lowered.includes(`from ${schema}.calls`) ||
-    lowered.includes(`join ${schema}.calls`) ||
-    lowered.includes("from calls") ||
-    lowered.includes("join calls");
-
-  if (!referencesCalls) {
-    throw new ReadonlySqlValidationError(
-      `Query must read from ${getAnalyticsSchema()}.calls only (e.g. SELECT ... FROM ${getAnalyticsSchema()}.calls).`,
-    );
-  }
-
+  validateAllowedAnalyticsTables(sql, schema);
   validateAllowedCallColumns(sql);
 
   if (!AGGREGATE_OR_LIMIT_PATTERN.test(lowered)) {

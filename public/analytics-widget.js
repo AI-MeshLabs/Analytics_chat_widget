@@ -1,7 +1,7 @@
 (function () {
   if (window.__OnePointAnalyticsWidgetLoaded) return;
   window.__OnePointAnalyticsWidgetLoaded = true;
-  window.__OPAW_WIDGET_BUILD = "20260530-n8n";
+  window.__OPAW_WIDGET_BUILD = "20260730-n8n2";
 
   function getRequestConfig() {
     var cfg = window.AnalyticsWidgetConfig || {};
@@ -342,7 +342,7 @@
     sendBtn.textContent = loading ? "Sending..." : "Send";
   }
 
-  var CHAT_FETCH_MS = 45000;
+  var CHAT_FETCH_MS = 90000;
   var FALLBACK_MESSAGE =
     "Sorry, I could not fetch analytics right now. Please try again.";
 
@@ -355,6 +355,23 @@
       c.abort();
     }, ms);
     return c.signal;
+  }
+
+  function parseWebhookPayload(rawText) {
+    var text = String(rawText || "").trim();
+    if (text.charAt(0) === "=") text = text.slice(1).trim();
+    if (!text) return null;
+    return JSON.parse(text);
+  }
+
+  async function readWebhookPayload(res) {
+    var rawText = await res.text();
+    try {
+      return parseWebhookPayload(rawText);
+    } catch (parseErr) {
+      if (!res.ok) throw new Error("Request failed");
+      throw parseErr;
+    }
   }
 
   async function askQuestion(question) {
@@ -380,12 +397,7 @@
       });
 
       var payload = null;
-      try {
-        payload = await res.json();
-      } catch (parseErr) {
-        if (!res.ok) throw new Error("Request failed");
-        throw parseErr;
-      }
+      payload = await readWebhookPayload(res);
 
       if (!res.ok) {
         var errDetail =

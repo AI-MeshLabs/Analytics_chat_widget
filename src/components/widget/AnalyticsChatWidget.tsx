@@ -16,7 +16,7 @@ declare global {
 const WIDGET_SCRIPT_ID = "onepoint-analytics-widget-script";
 const WIDGET_ROOT_ID = "onepoint-analytics-widget-root";
 /** Bump when public/analytics-widget.js changes so browsers fetch the latest asset. */
-const WIDGET_SCRIPT_VERSION = "20260530-n8n";
+const WIDGET_SCRIPT_VERSION = "20260730-n8n2";
 const WIDGET_DEV_RELOAD = process.env.NODE_ENV === "development";
 const USE_BACKEND = process.env.NEXT_PUBLIC_WIDGET_USE_BACKEND === "true";
 const PUBLIC_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL ?? "";
