@@ -1,10 +1,24 @@
 /** Inbound table: onepoint.calls */
 export const INBOUND_TABLE = "calls";
-export const INBOUND_ALLOWED_COLUMNS = ["call_date", "status", "duration_secs"] as const;
+export const INBOUND_ALLOWED_COLUMNS = [
+  "call_date",
+  "status",
+  "duration_secs",
+  "branch_code",
+  "branch_name",
+  "cliniko_business_id",
+] as const;
 
 /** Outbound table: onepoint.outbound_call_attempts */
 export const OUTBOUND_TABLE = "outbound_call_attempts";
-export const OUTBOUND_ALLOWED_COLUMNS = ["call_started_at", "outcome", "duration_secs"] as const;
+export const OUTBOUND_ALLOWED_COLUMNS = [
+  "call_started_at",
+  "outcome",
+  "duration_secs",
+  "branch_code",
+  "branch_name",
+  "cliniko_business_id",
+] as const;
 
 export const ALLOWED_ANALYTICS_COLUMNS = [
   ...INBOUND_ALLOWED_COLUMNS,

@@ -1,5 +1,6 @@
 import { getSupabaseClient } from "@/lib/db";
 import { getAnalyticsSchema } from "@/lib/supabaseConfig";
+import { repairSqlFromQuestion } from "@/lib/analytics/sqlQuestionRepair";
 import {
   INBOUND_TABLE,
   OUTBOUND_TABLE,
@@ -111,10 +112,17 @@ function normalizeRpcRows(data: unknown): ReadonlySqlRow[] {
   });
 }
 
-export async function executeReadonlySql(sqlInput: unknown): Promise<ReadonlySqlResult> {
+export async function executeReadonlySql(
+  sqlInput: unknown,
+  question?: unknown,
+): Promise<ReadonlySqlResult> {
   try {
     const normalized = normalizeSqlInput(sqlInput);
-    const preparedSql = validateAndPrepareReadOnlySql(normalized);
+    const repairedSql =
+      typeof question === "string" && question.trim()
+        ? repairSqlFromQuestion(normalized, question)
+        : normalized;
+    const preparedSql = validateAndPrepareReadOnlySql(repairedSql);
     const rpcName = getReadonlySqlRpcName();
 
     const { data, error } = await getSupabaseClient().rpc(rpcName, {
