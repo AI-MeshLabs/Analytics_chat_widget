@@ -7,7 +7,7 @@ services:
     container_name: clinikcalls-chatwidget
 
     ports:
-      - "4004:4003"
+      - "127.0.0.1:4004:4003"
 
     env_file:
       - .env
